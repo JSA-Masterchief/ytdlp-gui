@@ -1,0 +1,34 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+build/
+dist/
+*.spec.bak
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# App runtime data (never commit user data)
+*.log
+downloads/
+*.cookies
+cookies.txt
+config.local.json
+history.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# PyInstaller output
+*.exe
+*.dmg
+release/
