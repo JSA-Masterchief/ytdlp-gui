@@ -3,7 +3,7 @@
 Tracks phase-by-phase progress. Each phase maps to several days of commits.
 
 - [x] Phase 1 — Project scaffolding, packaging config, minimal PySide6 shell
-- [ ] Phase 2 — yt-dlp backend abstraction (subprocess/API wrapper)
+- [x] Phase 2 — yt-dlp backend abstraction (subprocess/API wrapper)
 - [ ] Phase 3 — URL analysis + metadata retrieval
 - [ ] Phase 4 — Format parsing + selector UI
 - [ ] Phase 5 — Download queue + threaded execution + progress hooks
