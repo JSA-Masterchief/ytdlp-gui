@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.constants import APP_NAME, APP_VERSION
+from ui.pages.download_page import DownloadPage
 
 NAV_SECTIONS = ["Download", "Queue", "History", "Formats", "Settings", "Logs"]
 
@@ -55,7 +56,10 @@ class MainWindow(QMainWindow):
 
         self.page_stack = QStackedWidget()
         for section in NAV_SECTIONS:
-            self.page_stack.addWidget(self._placeholder_page(section))
+            if section == "Download":
+                self.page_stack.addWidget(DownloadPage())
+            else:
+                self.page_stack.addWidget(self._placeholder_page(section))
 
         splitter.addWidget(self.nav_list)
         splitter.addWidget(self.page_stack)
