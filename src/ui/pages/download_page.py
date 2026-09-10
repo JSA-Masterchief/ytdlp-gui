@@ -18,8 +18,11 @@ from PySide6.QtWidgets import (
 )
 
 from backend.ytdlp_backend import YtdlpBackend
+from formats.parser import available_video_heights
 from services.metadata_service import MetadataService
+from ui.widgets.format_selector_widget import FormatSelectorWidget
 from ui.widgets.metadata_panel import MetadataPanel
+from utils.paths import get_default_download_dir
 from utils.validation import validate_urls
 
 logger = logging.getLogger("ytdlp_gui")
@@ -35,6 +38,9 @@ class DownloadPage(QWidget):
         self._build_ui()
 
     def _build_ui(self) -> None:
+        self._output_dir = str(get_default_download_dir())
+        self._filename_template = "%(title)s [%(id)s].%(ext)s"
+
         layout = QVBoxLayout(self)
 
         instructions = QLabel("Paste one or more URLs (one per line):")
@@ -44,6 +50,7 @@ class DownloadPage(QWidget):
         self.url_input.setPlaceholderText("https://www.youtube.com/watch?v=...")
         self.url_input.setAcceptDrops(True)
         self.url_input.setFixedHeight(90)
+        self.url_input.textChanged.connect(self._update_preview)
         layout.addWidget(self.url_input)
 
         self.status_label = QLabel("")
@@ -57,6 +64,12 @@ class DownloadPage(QWidget):
 
         self.metadata_panel = MetadataPanel()
         layout.addWidget(self.metadata_panel, stretch=1)
+
+        self.format_selector = FormatSelectorWidget()
+        self.format_selector.selection_changed.connect(self._update_preview)
+        layout.addWidget(self.format_selector)
+
+        self._update_preview()
 
     def _on_analyze_clicked(self) -> None:
         raw_text = self.url_input.toPlainText()
@@ -89,6 +102,8 @@ class DownloadPage(QWidget):
             self.metadata_panel.show_playlist(result)
         elif isinstance(result, MediaInfo):
             self.metadata_panel.show_media(result)
+            self.format_selector.set_available_heights(available_video_heights(result.formats))
+        self._update_preview()
 
     def _on_analysis_failed(self, url: str, user_message: str, technical_detail: str) -> None:
         self._reset_button()
@@ -98,3 +113,8 @@ class DownloadPage(QWidget):
     def _reset_button(self) -> None:
         self.analyze_button.setEnabled(True)
         self.analyze_button.setText("Analyze")
+
+    def _update_preview(self) -> None:
+        first_line = self.url_input.toPlainText().strip().splitlines()[:1]
+        url = first_line[0].strip() if first_line else ""
+        self.format_selector.update_preview(url, self._output_dir, self._filename_template)
