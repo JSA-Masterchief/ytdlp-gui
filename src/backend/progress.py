@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from yt_dlp.utils import DownloadCancelled
+
 
 @dataclass
 class DownloadProgress:
@@ -54,10 +56,29 @@ def parse_progress_hook(data: dict[str, Any]) -> DownloadProgress:
 ProgressCallback = Callable[[DownloadProgress], None]
 
 
+class DownloadCancelRequested(Exception):
+    """Raise this from inside a ProgressCallback to stop an in-progress
+    download cooperatively.
+
+    yt-dlp's hook chain (see downloader/common.py:_hook_progress) calls
+    hooks with no surrounding try/except, so any exception we raise here
+    propagates straight out of YoutubeDL.download(). But only its own
+    `DownloadCancelled` is specifically recognized and cleanly re-raised
+    through yt-dlp's internal wrapper (see YoutubeDL.py:__download_wrapper);
+    make_yt_dlp_hook translates this exception into that one at the
+    boundary so callers outside backend/ never need to import yt_dlp
+    directly just to request a cancellation.
+    """
+
+
 def make_yt_dlp_hook(callback: ProgressCallback) -> Callable[[dict], None]:
     """Wrap a DownloadProgress-based callback as a raw yt-dlp progress hook."""
 
     def _hook(data: dict[str, Any]) -> None:
-        callback(parse_progress_hook(data))
+        progress = parse_progress_hook(data)
+        try:
+            callback(progress)
+        except DownloadCancelRequested as exc:
+            raise DownloadCancelled(str(exc) or "Cancelled by user") from exc
 
     return _hook
