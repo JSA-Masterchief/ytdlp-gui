@@ -17,8 +17,8 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from backend.models import MediaInfo, PlaylistInfo
-from backend.progress import parse_progress_hook
-from backend.ytdlp_backend import YtdlpBackend, YtdlpBackendError, _translate_error
+from backend.progress import DownloadCancelRequested, make_yt_dlp_hook, parse_progress_hook
+from backend.ytdlp_backend import DownloadCancelledError, YtdlpBackend, YtdlpBackendError, _translate_error
 
 SAMPLE_VIDEO_INFO = {
     "_type": "video",
@@ -149,3 +149,31 @@ class TestProgressParsing:
     def test_missing_totals_leave_percent_none(self):
         progress = parse_progress_hook({"status": "downloading", "downloaded_bytes": 500})
         assert progress.percent is None
+
+
+class TestCancellation:
+    def test_cancel_requested_becomes_yt_dlp_download_cancelled(self):
+        from yt_dlp.utils import DownloadCancelled
+
+        def callback(progress):
+            raise DownloadCancelRequested("stop please")
+
+        hook = make_yt_dlp_hook(callback)
+        with pytest.raises(DownloadCancelled):
+            hook({"status": "downloading", "downloaded_bytes": 10})
+
+    def test_download_translates_cancellation_to_download_cancelled_error(self, backend: YtdlpBackend):
+        from yt_dlp.utils import DownloadCancelled
+
+        mock_ydl = MagicMock()
+        mock_ydl.download.side_effect = DownloadCancelled("stopped")
+        mock_ydl.__enter__.return_value = mock_ydl
+        mock_ydl.__exit__.return_value = False
+
+        with patch("backend.ytdlp_backend.yt_dlp.YoutubeDL", return_value=mock_ydl):
+            with pytest.raises(DownloadCancelledError):
+                backend.download("https://example.com/video", {"format": "best"})
+
+    def test_download_cancelled_error_is_not_a_generic_backend_error_message(self):
+        err = DownloadCancelledError()
+        assert err.user_message == "Download cancelled."
