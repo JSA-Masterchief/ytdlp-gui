@@ -32,6 +32,16 @@ class YtdlpBackendError(Exception):
         self.technical_detail = technical_detail
 
 
+class DownloadCancelledError(YtdlpBackendError):
+    """Raised when a download was stopped via DownloadCancelRequested,
+    distinct from YtdlpBackendError so callers can tell a deliberate user
+    cancellation apart from a real failure (and avoid showing it as one).
+    """
+
+    def __init__(self, technical_detail: str = "Cancelled by user") -> None:
+        super().__init__("Download cancelled.", technical_detail)
+
+
 def _translate_error(exc: Exception) -> YtdlpBackendError:
     """Map common yt-dlp/yt_dlp.utils.DownloadError text to friendly messages."""
     text = str(exc).lower()
@@ -169,6 +179,8 @@ class YtdlpBackend:
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([url])
+        except yt_dlp.utils.DownloadCancelled as exc:
+            raise DownloadCancelledError(str(exc)) from exc
         except yt_dlp.utils.DownloadError as exc:
             raise _translate_error(exc) from exc
         except Exception as exc:  # noqa: BLE001
