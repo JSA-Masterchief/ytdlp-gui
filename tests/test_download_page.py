@@ -76,3 +76,43 @@ def test_preview_updates_when_url_typed(qtbot):
     page.url_input.setPlainText("https://example.com/xyz")
 
     assert "example.com/xyz" in page.format_selector.preview_box.toPlainText()
+
+
+def test_download_button_disabled_until_analysis_completes(qtbot):
+    backend = MagicMock()
+    backend.analyze.return_value = SAMPLE_MEDIA
+    service = MetadataService(backend=backend)
+    manager = MagicMock()
+
+    page = DownloadPage(metadata_service=service, download_manager=manager)
+    qtbot.addWidget(page)
+
+    assert not page.download_button.isEnabled()
+
+    page.url_input.setPlainText("https://example.com/abc123")
+    with qtbot.waitSignal(service.analysis_finished, timeout=2000):
+        page.analyze_button.click()
+
+    assert page.download_button.isEnabled()
+
+
+def test_download_button_adds_task_to_manager(qtbot):
+    backend = MagicMock()
+    backend.analyze.return_value = SAMPLE_MEDIA
+    service = MetadataService(backend=backend)
+    manager = MagicMock()
+
+    page = DownloadPage(metadata_service=service, download_manager=manager)
+    qtbot.addWidget(page)
+
+    page.url_input.setPlainText("https://example.com/abc123")
+    with qtbot.waitSignal(service.analysis_finished, timeout=2000):
+        page.analyze_button.click()
+
+    page.download_button.click()
+
+    manager.add_task.assert_called_once()
+    added_task = manager.add_task.call_args[0][0]
+    assert added_task.url == "https://example.com/abc123"
+    assert added_task.title == "Sample Video"
+    assert not page.queued_label.isHidden()
