@@ -18,7 +18,10 @@ from PySide6.QtWidgets import (
 )
 
 from backend.ytdlp_backend import YtdlpBackend
+from download.manager import DownloadManager
+from download.task import DownloadTask
 from formats.parser import available_video_heights
+from formats.selector import build_ytdlp_options
 from services.metadata_service import MetadataService
 from ui.widgets.format_selector_widget import FormatSelectorWidget
 from ui.widgets.metadata_panel import MetadataPanel
@@ -29,11 +32,19 @@ logger = logging.getLogger("ytdlp_gui")
 
 
 class DownloadPage(QWidget):
-    def __init__(self, metadata_service: MetadataService | None = None, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        metadata_service: MetadataService | None = None,
+        download_manager: DownloadManager | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._metadata_service = metadata_service or MetadataService(YtdlpBackend())
         self._metadata_service.analysis_finished.connect(self._on_analysis_finished)
         self._metadata_service.analysis_failed.connect(self._on_analysis_failed)
+        self._download_manager = download_manager or DownloadManager(YtdlpBackend())
+        self._analyzed_title: str | None = None
+        self._analyzed_url: str | None = None
 
         self._build_ui()
 
@@ -69,6 +80,16 @@ class DownloadPage(QWidget):
         self.format_selector.selection_changed.connect(self._update_preview)
         layout.addWidget(self.format_selector)
 
+        self.download_button = QPushButton("Download")
+        self.download_button.setEnabled(False)
+        self.download_button.clicked.connect(self._on_download_clicked)
+        layout.addWidget(self.download_button, alignment=Qt.AlignLeft)
+
+        self.queued_label = QLabel("")
+        self.queued_label.setStyleSheet("color: #2e7d32;")
+        self.queued_label.hide()
+        layout.addWidget(self.queued_label)
+
         self._update_preview()
 
     def _on_analyze_clicked(self) -> None:
@@ -91,6 +112,8 @@ class DownloadPage(QWidget):
         first_url = valid_urls[0]
         self.analyze_button.setEnabled(False)
         self.analyze_button.setText("Analyzing…")
+        self.download_button.setEnabled(False)
+        self.queued_label.hide()
         self.metadata_panel.clear()
         self._metadata_service.analyze(first_url)
 
@@ -100,15 +123,20 @@ class DownloadPage(QWidget):
 
         if isinstance(result, PlaylistInfo):
             self.metadata_panel.show_playlist(result)
+            self._analyzed_title = result.title
         elif isinstance(result, MediaInfo):
             self.metadata_panel.show_media(result)
             self.format_selector.set_available_heights(available_video_heights(result.formats))
+            self._analyzed_title = result.title
+        self._analyzed_url = url
+        self.download_button.setEnabled(True)
         self._update_preview()
 
     def _on_analysis_failed(self, url: str, user_message: str, technical_detail: str) -> None:
         self._reset_button()
         logger.warning("Analysis failed for %s: %s", url, technical_detail)
         self.metadata_panel.show_error(user_message)
+        self.download_button.setEnabled(False)
 
     def _reset_button(self) -> None:
         self.analyze_button.setEnabled(True)
@@ -118,3 +146,22 @@ class DownloadPage(QWidget):
         first_line = self.url_input.toPlainText().strip().splitlines()[:1]
         url = first_line[0].strip() if first_line else ""
         self.format_selector.update_preview(url, self._output_dir, self._filename_template)
+
+    def _on_download_clicked(self) -> None:
+        if not self._analyzed_url:
+            return
+
+        selection = self.format_selector.current_selection()
+        options = build_ytdlp_options(selection, self._output_dir, self._filename_template)
+        task = DownloadTask(
+            url=self._analyzed_url,
+            selection=selection,
+            output_dir=self._output_dir,
+            filename_template=self._filename_template,
+            ytdlp_options=options,
+            title=self._analyzed_title,
+        )
+        self._download_manager.add_task(task)
+
+        self.queued_label.setText(f"Added to queue: {task.display_title}")
+        self.queued_label.show()
