@@ -22,7 +22,10 @@ from PySide6.QtWidgets import (
 )
 
 from app.constants import APP_NAME, APP_VERSION
+from backend.ytdlp_backend import YtdlpBackend
+from download.manager import DownloadManager
 from ui.pages.download_page import DownloadPage
+from ui.pages.queue_page import QueuePage
 
 NAV_SECTIONS = ["Download", "Queue", "History", "Formats", "Settings", "Logs"]
 
@@ -54,10 +57,16 @@ class MainWindow(QMainWindow):
             QListWidgetItem(section, self.nav_list)
         self.nav_list.currentRowChanged.connect(self._on_nav_changed)
 
+        # One DownloadManager shared by the Download page (which adds tasks)
+        # and the Queue page (which displays/controls them).
+        self.download_manager = DownloadManager(YtdlpBackend())
+
         self.page_stack = QStackedWidget()
         for section in NAV_SECTIONS:
             if section == "Download":
-                self.page_stack.addWidget(DownloadPage())
+                self.page_stack.addWidget(DownloadPage(download_manager=self.download_manager))
+            elif section == "Queue":
+                self.page_stack.addWidget(QueuePage(self.download_manager))
             else:
                 self.page_stack.addWidget(self._placeholder_page(section))
 
@@ -81,3 +90,9 @@ class MainWindow(QMainWindow):
     def _on_nav_changed(self, index: int) -> None:
         if index >= 0:
             self.page_stack.setCurrentIndex(index)
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override signature
+        # Cancel and synchronously join any active downloads before the
+        # application exits, so no QThread is torn down mid-download.
+        self.download_manager.shutdown()
+        super().closeEvent(event)
