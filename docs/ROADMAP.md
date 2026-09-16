@@ -6,7 +6,7 @@ Tracks phase-by-phase progress. Each phase maps to several days of commits.
 - [x] Phase 2 — yt-dlp backend abstraction (subprocess/API wrapper)
 - [x] Phase 3 — URL analysis + metadata retrieval
 - [x] Phase 4 — Format parsing + selector UI
-- [ ] Phase 5 — Download queue + threaded execution + progress hooks
+- [x] Phase 5 — Download queue + threaded execution + progress hooks
 - [ ] Phase 6 — Audio/video/subtitle option panels
 - [ ] Phase 7 — Playlist support
 - [ ] Phase 8 — Advanced options + custom args + command preview
