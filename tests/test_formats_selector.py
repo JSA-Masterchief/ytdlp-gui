@@ -103,3 +103,31 @@ class TestBuildCommandPreview:
         )
         assert "--extract-audio" in preview
         assert "--audio-format flac" in preview
+
+    def test_preview_shows_subtitle_and_sponsorblock_flags(self):
+        from formats.advanced_options import AdvancedOptions, SponsorBlockOptions, SubtitleOptions
+
+        selection = FormatSelection()
+        advanced = AdvancedOptions(
+            subtitles=SubtitleOptions(mode="manual", languages=["en"], embed=True),
+            sponsorblock=SponsorBlockOptions(enabled=True, action="remove", categories=["sponsor"]),
+        )
+        preview = build_command_preview(
+            "https://example.com/v", selection, "/tmp/downloads", "%(title)s.%(ext)s", advanced=advanced
+        )
+        assert "--write-subs" in preview
+        assert "--sub-langs en" in preview
+        assert "--embed-subs" in preview
+        assert "--sponsorblock-remove sponsor" in preview
+
+    def test_preview_shows_metadata_and_thumbnail_flags(self):
+        from formats.advanced_options import AdvancedOptions, MetadataOptions
+
+        selection = FormatSelection()
+        advanced = AdvancedOptions(metadata=MetadataOptions(embed_metadata=True, embed_thumbnail=True))
+        preview = build_command_preview(
+            "https://example.com/v", selection, "/tmp/downloads", "%(title)s.%(ext)s", advanced=advanced
+        )
+        assert "--add-metadata" in preview
+        assert "--embed-thumbnail" in preview
+        assert "--write-thumbnail" in preview
