@@ -1,6 +1,5 @@
 """The format/quality picker shown after a successful analysis, with a
-live, read-only command preview that updates as the user changes options.
-"""
+live, read-only command preview that updates as the user changes options."""
 
 from __future__ import annotations
 
@@ -106,16 +105,12 @@ class FormatSelectorWidget(QWidget):
         self.selection_changed.emit()
 
     def set_available_heights(self, heights: list[int]) -> None:
-        """Restrict the quality dropdown to resolutions actually available
-        for the analyzed video, keeping "Best available" always present.
-        """
         available_labels = [QUALITY_BEST]
         for label, height in QUALITY_HEIGHTS.items():
             if height in heights:
                 available_labels.append(label)
         previous = self.current_selection().quality
         self._populate_quality(available_labels)
-        # Restore the previous choice if it's still valid, else fall back to best.
         idx = self.quality_combo.findData(previous)
         self.quality_combo.setCurrentIndex(idx if idx >= 0 else 0)
 
@@ -127,6 +122,6 @@ class FormatSelectorWidget(QWidget):
             audio_format=self.audio_format_combo.currentData() or "best",
         )
 
-    def update_preview(self, url: str, output_dir: str, filename_template: str) -> None:
-        preview = build_command_preview(url, self.current_selection(), output_dir, filename_template)
+    def update_preview(self, url: str, output_dir: str, filename_template: str, advanced: object | None = None) -> None:
+        preview = build_command_preview(url, self.current_selection(), output_dir, filename_template, advanced)
         self.preview_box.setPlainText(preview)
