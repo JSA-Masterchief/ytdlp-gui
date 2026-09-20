@@ -1,8 +1,5 @@
-"""The primary Download page: paste URL(s), click Analyze, see results.
-
-Downloading itself is Phase 5 (queue). This page's job for Phase 3 is
-analysis only — it must never start a download just from Analyze.
-"""
+"""The primary Download page: paste URL(s), click Analyze, see results,
+choose a format, and click Download to enqueue it."""
 
 from __future__ import annotations
 
@@ -23,6 +20,7 @@ from download.task import DownloadTask
 from formats.parser import available_video_heights
 from formats.selector import build_ytdlp_options
 from services.metadata_service import MetadataService
+from ui.widgets.advanced_options_widget import AdvancedOptionsWidget
 from ui.widgets.format_selector_widget import FormatSelectorWidget
 from ui.widgets.metadata_panel import MetadataPanel
 from utils.paths import get_default_download_dir
@@ -80,6 +78,10 @@ class DownloadPage(QWidget):
         self.format_selector.selection_changed.connect(self._update_preview)
         layout.addWidget(self.format_selector)
 
+        self.advanced_options = AdvancedOptionsWidget()
+        self.advanced_options.options_changed.connect(self._update_preview)
+        layout.addWidget(self.advanced_options)
+
         self.download_button = QPushButton("Download")
         self.download_button.setEnabled(False)
         self.download_button.clicked.connect(self._on_download_clicked)
@@ -107,8 +109,6 @@ class DownloadPage(QWidget):
             self.status_label.show()
             return
 
-        # Phase 3 analyzes the first URL for display; full multi-URL queueing
-        # arrives with the Phase 5 download queue.
         first_url = valid_urls[0]
         self.analyze_button.setEnabled(False)
         self.analyze_button.setText("Analyzing…")
@@ -119,7 +119,7 @@ class DownloadPage(QWidget):
 
     def _on_analysis_finished(self, url: str, result) -> None:  # noqa: ANN001
         self._reset_button()
-        from backend.models import MediaInfo, PlaylistInfo  # local import avoids cycle at module load
+        from backend.models import MediaInfo, PlaylistInfo
 
         if isinstance(result, PlaylistInfo):
             self.metadata_panel.show_playlist(result)
@@ -127,6 +127,7 @@ class DownloadPage(QWidget):
         elif isinstance(result, MediaInfo):
             self.metadata_panel.show_media(result)
             self.format_selector.set_available_heights(available_video_heights(result.formats))
+            self.advanced_options.set_available_languages(result.subtitle_languages or result.automatic_caption_languages)
             self._analyzed_title = result.title
         self._analyzed_url = url
         self.download_button.setEnabled(True)
@@ -145,14 +146,17 @@ class DownloadPage(QWidget):
     def _update_preview(self) -> None:
         first_line = self.url_input.toPlainText().strip().splitlines()[:1]
         url = first_line[0].strip() if first_line else ""
-        self.format_selector.update_preview(url, self._output_dir, self._filename_template)
+        self.format_selector.update_preview(
+            url, self._output_dir, self._filename_template, self.advanced_options.current_options()
+        )
 
     def _on_download_clicked(self) -> None:
         if not self._analyzed_url:
             return
 
         selection = self.format_selector.current_selection()
-        options = build_ytdlp_options(selection, self._output_dir, self._filename_template)
+        advanced = self.advanced_options.current_options()
+        options = build_ytdlp_options(selection, self._output_dir, self._filename_template, advanced)
         task = DownloadTask(
             url=self._analyzed_url,
             selection=selection,
