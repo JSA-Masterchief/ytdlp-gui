@@ -1,7 +1,3 @@
-"""Integration test covering DownloadPage's Analyze -> MetadataPanel ->
-FormatSelectorWidget wiring, with a mocked backend (no real network calls).
-"""
-
 from __future__ import annotations
 
 import sys
