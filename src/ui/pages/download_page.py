@@ -18,11 +18,13 @@ from backend.ytdlp_backend import YtdlpBackend
 from download.manager import DownloadManager
 from download.task import DownloadTask
 from formats.parser import available_video_heights
+from formats.playlist_selection import apply_archive_option, resolve_selected_entries
 from formats.selector import build_ytdlp_options
 from services.metadata_service import MetadataService
 from ui.widgets.advanced_options_widget import AdvancedOptionsWidget
 from ui.widgets.format_selector_widget import FormatSelectorWidget
 from ui.widgets.metadata_panel import MetadataPanel
+from ui.widgets.playlist_table_widget import PlaylistTableWidget
 from utils.paths import get_default_download_dir
 from utils.validation import validate_urls
 
@@ -43,6 +45,7 @@ class DownloadPage(QWidget):
         self._download_manager = download_manager or DownloadManager(YtdlpBackend())
         self._analyzed_title: str | None = None
         self._analyzed_url: str | None = None
+        self._analyzed_playlist = None  # PlaylistInfo | None, set on analysis
 
         self._build_ui()
 
@@ -73,6 +76,11 @@ class DownloadPage(QWidget):
 
         self.metadata_panel = MetadataPanel()
         layout.addWidget(self.metadata_panel, stretch=1)
+
+        self.playlist_table = PlaylistTableWidget()
+        self.playlist_table.selection_changed.connect(self._update_preview)
+        self.playlist_table.hide()
+        layout.addWidget(self.playlist_table)
 
         self.format_selector = FormatSelectorWidget()
         self.format_selector.selection_changed.connect(self._update_preview)
@@ -115,6 +123,8 @@ class DownloadPage(QWidget):
         self.download_button.setEnabled(False)
         self.queued_label.hide()
         self.metadata_panel.clear()
+        self.playlist_table.hide()
+        self._analyzed_playlist = None
         self._metadata_service.analyze(first_url)
 
     def _on_analysis_finished(self, url: str, result) -> None:  # noqa: ANN001
@@ -123,11 +133,16 @@ class DownloadPage(QWidget):
 
         if isinstance(result, PlaylistInfo):
             self.metadata_panel.show_playlist(result)
+            self.playlist_table.load_playlist(result)
+            self.playlist_table.show()
+            self._analyzed_playlist = result
             self._analyzed_title = result.title
         elif isinstance(result, MediaInfo):
             self.metadata_panel.show_media(result)
             self.format_selector.set_available_heights(available_video_heights(result.formats))
             self.advanced_options.set_available_languages(result.subtitle_languages or result.automatic_caption_languages)
+            self.playlist_table.hide()
+            self._analyzed_playlist = None
             self._analyzed_title = result.title
         self._analyzed_url = url
         self.download_button.setEnabled(True)
@@ -154,6 +169,12 @@ class DownloadPage(QWidget):
         if not self._analyzed_url:
             return
 
+        if self._analyzed_playlist is not None:
+            self._enqueue_playlist_downloads()
+        else:
+            self._enqueue_single_download()
+
+    def _enqueue_single_download(self) -> None:
         selection = self.format_selector.current_selection()
         advanced = self.advanced_options.current_options()
         options = build_ytdlp_options(selection, self._output_dir, self._filename_template, advanced)
@@ -168,4 +189,33 @@ class DownloadPage(QWidget):
         self._download_manager.add_task(task)
 
         self.queued_label.setText(f"Added to queue: {task.display_title}")
+        self.queued_label.show()
+
+    def _enqueue_playlist_downloads(self) -> None:
+        playlist = self._analyzed_playlist
+        playlist_options = self.playlist_table.current_options()
+        entries = resolve_selected_entries(playlist.entries, playlist_options)
+
+        if not entries:
+            self.queued_label.setText("No videos selected.")
+            self.queued_label.show()
+            return
+
+        selection = self.format_selector.current_selection()
+        advanced = self.advanced_options.current_options()
+        base_options = build_ytdlp_options(selection, self._output_dir, self._filename_template, advanced)
+
+        for entry in entries:
+            entry_options = apply_archive_option(base_options, playlist_options)
+            task = DownloadTask(
+                url=entry.url,
+                selection=selection,
+                output_dir=self._output_dir,
+                filename_template=self._filename_template,
+                ytdlp_options=entry_options,
+                title=entry.title,
+            )
+            self._download_manager.add_task(task)
+
+        self.queued_label.setText(f"Added {len(entries)} video(s) to queue from '{playlist.title}'.")
         self.queued_label.show()
