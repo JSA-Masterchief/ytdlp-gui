@@ -115,12 +115,31 @@ def build_command_preview(
     output_dir: str,
     filename_template: str,
     advanced: Any | None = None,
+    raw_custom_args: str = "",
 ) -> str:
     options = build_ytdlp_options(selection, output_dir, filename_template, advanced)
+    return render_command_preview(url, options, raw_custom_args)
 
-    parts = ["yt-dlp", "-f", shlex.quote(options["format"])]
 
-    if "merge_output_format" in options:
+def render_command_preview(url: str, options: dict[str, Any], raw_custom_args: str = "", overridden_keys: frozenset[str] = frozenset()) -> str:
+    """Build the display-only CLI string for an already-built options dict.
+
+    Split out from build_command_preview so callers that have merged in
+    custom-argument overrides (see formats.custom_args.merge_custom_args)
+    can render a preview reflecting the real, final options — not just
+    what the GUI controls alone would produce.
+
+    `overridden_keys`, if given, are option keys that custom arguments
+    already override (see merge_custom_args's conflict list): the
+    corresponding GUI-derived flag is skipped so it isn't shown twice —
+    once as what the GUI would have generated and again as the user's
+    literal override text appended below.
+    """
+    parts = ["yt-dlp"]
+    if "format" not in overridden_keys:
+        parts += ["-f", shlex.quote(options["format"])]
+
+    if "merge_output_format" in options and "merge_output_format" not in overridden_keys:
         parts += ["--merge-output-format", options["merge_output_format"]]
 
     if options.get("writesubtitles"):
@@ -154,7 +173,16 @@ def build_command_preview(
             parts += pp_flag_map[key](pp)
             seen_keys.add(key)
 
-    parts += ["-o", shlex.quote(options["outtmpl"])]
+    # Raw custom arguments are shown verbatim, exactly as the user typed
+    # them, rather than trying to reverse-engineer every possible flag
+    # back out of the merged options dict — this is both simpler and more
+    # honest about what will actually run (their exact text, in order).
+    if raw_custom_args.strip():
+        parts.append(raw_custom_args.strip())
+
+    outtmpl = options["outtmpl"]
+    outtmpl_default = outtmpl.get("default", "") if isinstance(outtmpl, dict) else outtmpl
+    parts += ["-o", shlex.quote(outtmpl_default)]
     parts.append(shlex.quote(url) if url else '"<URL>"')
 
     return " ".join(parts)
