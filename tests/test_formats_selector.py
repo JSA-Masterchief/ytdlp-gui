@@ -131,3 +131,23 @@ class TestBuildCommandPreview:
         assert "--add-metadata" in preview
         assert "--embed-thumbnail" in preview
         assert "--write-thumbnail" in preview
+
+    def test_preview_appends_raw_custom_args_verbatim(self):
+        selection = FormatSelection()
+        preview = build_command_preview(
+            "https://example.com/v",
+            selection,
+            "/tmp/downloads",
+            "%(title)s.%(ext)s",
+            raw_custom_args="--limit-rate 500K --proxy http://127.0.0.1:8080",
+        )
+        assert "--limit-rate 500K --proxy http://127.0.0.1:8080" in preview
+        # Custom args appear before -o/URL, matching real yt-dlp CLI ordering conventions.
+        assert preview.index("--limit-rate") < preview.index("-o ")
+
+    def test_render_command_preview_handles_dict_valued_outtmpl(self):
+        from formats.selector import render_command_preview
+
+        options = {"format": "best", "outtmpl": {"default": "%(title)s.%(ext)s", "pl_thumbnail": ""}}
+        preview = render_command_preview("https://example.com/v", options)
+        assert "%(title)s.%(ext)s" in preview
