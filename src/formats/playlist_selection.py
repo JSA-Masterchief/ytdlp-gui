@@ -75,8 +75,13 @@ def apply_archive_option(ytdlp_options: dict, playlist_options: PlaylistDownload
     yt-dlp treats this as a real file it reads before, and appends to
     after, each download — pointing every generated task at the same path
     is what makes "skip already downloaded" work across a playlist.
+
+    Never overwrites an existing download_archive value already present
+    in ytdlp_options (e.g. from a --download-archive the user typed into
+    Custom Arguments) — that would silently discard something the user
+    deliberately set, which this project's options merging never does.
     """
     opts = dict(ytdlp_options)
-    if playlist_options.skip_archived and playlist_options.archive_path:
+    if playlist_options.skip_archived and playlist_options.archive_path and "download_archive" not in opts:
         opts["download_archive"] = playlist_options.archive_path
     return opts
