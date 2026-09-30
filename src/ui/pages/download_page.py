@@ -17,11 +17,13 @@ from PySide6.QtWidgets import (
 from backend.ytdlp_backend import YtdlpBackend
 from download.manager import DownloadManager
 from download.task import DownloadTask
+from formats.custom_args import merge_custom_args
 from formats.parser import available_video_heights
 from formats.playlist_selection import apply_archive_option, resolve_selected_entries
-from formats.selector import build_ytdlp_options
+from formats.selector import build_ytdlp_options, render_command_preview
 from services.metadata_service import MetadataService
 from ui.widgets.advanced_options_widget import AdvancedOptionsWidget
+from ui.widgets.custom_args_widget import CustomArgsWidget
 from ui.widgets.format_selector_widget import FormatSelectorWidget
 from ui.widgets.metadata_panel import MetadataPanel
 from ui.widgets.playlist_table_widget import PlaylistTableWidget
@@ -89,6 +91,10 @@ class DownloadPage(QWidget):
         self.advanced_options = AdvancedOptionsWidget()
         self.advanced_options.options_changed.connect(self._update_preview)
         layout.addWidget(self.advanced_options)
+
+        self.custom_args = CustomArgsWidget()
+        self.custom_args.args_changed.connect(self._update_preview)
+        layout.addWidget(self.custom_args)
 
         self.download_button = QPushButton("Download")
         self.download_button.setEnabled(False)
@@ -161,12 +167,39 @@ class DownloadPage(QWidget):
     def _update_preview(self) -> None:
         first_line = self.url_input.toPlainText().strip().splitlines()[:1]
         url = first_line[0].strip() if first_line else ""
-        self.format_selector.update_preview(
-            url, self._output_dir, self._filename_template, self.advanced_options.current_options()
-        )
+
+        selection = self.format_selector.current_selection()
+        advanced = self.advanced_options.current_options()
+        base_options = build_ytdlp_options(selection, self._output_dir, self._filename_template, advanced)
+
+        custom_overrides = self.custom_args.current_overrides()
+        merged_options, conflicts, overridden_keys = merge_custom_args(base_options, custom_overrides)
+        self.custom_args.show_conflicts(conflicts)
+
+        raw_text = self.custom_args.args_edit.text() if self.custom_args.is_valid() else ""
+        preview = render_command_preview(url, merged_options, raw_text, overridden_keys)
+        self.format_selector.set_preview_text(preview)
+
+    def _build_final_options(self, entry_url: str | None = None) -> dict:
+        """The options dict actually handed to the download queue: GUI
+        selections + advanced options + custom-argument overrides, fully
+        merged. Shared by both the single-video and playlist enqueue paths
+        so custom arguments apply consistently to either.
+        """
+        selection = self.format_selector.current_selection()
+        advanced = self.advanced_options.current_options()
+        base_options = build_ytdlp_options(selection, self._output_dir, self._filename_template, advanced)
+        custom_overrides = self.custom_args.current_overrides()
+        merged_options, _conflicts, _overridden_keys = merge_custom_args(base_options, custom_overrides)
+        return merged_options
 
     def _on_download_clicked(self) -> None:
         if not self._analyzed_url:
+            return
+
+        if not self.custom_args.is_valid():
+            self.queued_label.setText("Fix the custom arguments error above before downloading.")
+            self.queued_label.show()
             return
 
         if self._analyzed_playlist is not None:
@@ -176,8 +209,7 @@ class DownloadPage(QWidget):
 
     def _enqueue_single_download(self) -> None:
         selection = self.format_selector.current_selection()
-        advanced = self.advanced_options.current_options()
-        options = build_ytdlp_options(selection, self._output_dir, self._filename_template, advanced)
+        options = self._build_final_options()
         task = DownloadTask(
             url=self._analyzed_url,
             selection=selection,
@@ -202,8 +234,7 @@ class DownloadPage(QWidget):
             return
 
         selection = self.format_selector.current_selection()
-        advanced = self.advanced_options.current_options()
-        base_options = build_ytdlp_options(selection, self._output_dir, self._filename_template, advanced)
+        base_options = self._build_final_options()
 
         for entry in entries:
             entry_options = apply_archive_option(base_options, playlist_options)
