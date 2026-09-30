@@ -125,3 +125,11 @@ class FormatSelectorWidget(QWidget):
     def update_preview(self, url: str, output_dir: str, filename_template: str, advanced: object | None = None) -> None:
         preview = build_command_preview(url, self.current_selection(), output_dir, filename_template, advanced)
         self.preview_box.setPlainText(preview)
+
+    def set_preview_text(self, text: str) -> None:
+        """Set the preview directly from an already-rendered string — used
+        when the owning page has merged in custom-argument overrides and
+        needs the preview to reflect the real, final options rather than
+        what this widget alone would produce.
+        """
+        self.preview_box.setPlainText(text)
