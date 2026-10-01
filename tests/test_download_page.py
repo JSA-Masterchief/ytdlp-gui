@@ -230,3 +230,65 @@ def test_analyzing_single_video_after_playlist_hides_playlist_table_again(qtbot)
         page.analyze_button.click()
 
     assert page.playlist_table.isHidden()
+
+
+def test_custom_args_reflected_in_command_preview(qtbot):
+    backend = MagicMock()
+    service = MetadataService(backend=backend)
+    page = DownloadPage(metadata_service=service, download_manager=MagicMock())
+    qtbot.addWidget(page)
+
+    page.custom_args.args_edit.setText("--limit-rate 500K")
+
+    assert "--limit-rate 500K" in page.format_selector.preview_box.toPlainText()
+
+
+def test_custom_args_conflict_with_format_is_shown_and_wins(qtbot):
+    backend = MagicMock()
+    service = MetadataService(backend=backend)
+    page = DownloadPage(metadata_service=service, download_manager=MagicMock())
+    qtbot.addWidget(page)
+
+    page.custom_args.args_edit.setText("-f worst")
+
+    assert not page.custom_args.conflict_label.isHidden()
+    assert "format" in page.custom_args.conflict_label.text()
+
+
+def test_download_blocked_while_custom_args_invalid(qtbot):
+    backend = MagicMock()
+    backend.analyze.return_value = SAMPLE_MEDIA
+    service = MetadataService(backend=backend)
+    manager = MagicMock()
+    page = DownloadPage(metadata_service=service, download_manager=manager)
+    qtbot.addWidget(page)
+
+    page.url_input.setPlainText("https://example.com/abc123")
+    with qtbot.waitSignal(service.analysis_finished, timeout=2000):
+        page.analyze_button.click()
+
+    page.custom_args.args_edit.setText("--this-is-not-a-real-flag")
+    page.download_button.click()
+
+    manager.add_task.assert_not_called()
+    assert "custom arguments" in page.queued_label.text().lower()
+
+
+def test_valid_custom_args_are_merged_into_enqueued_task(qtbot):
+    backend = MagicMock()
+    backend.analyze.return_value = SAMPLE_MEDIA
+    service = MetadataService(backend=backend)
+    manager = MagicMock()
+    page = DownloadPage(metadata_service=service, download_manager=manager)
+    qtbot.addWidget(page)
+
+    page.url_input.setPlainText("https://example.com/abc123")
+    with qtbot.waitSignal(service.analysis_finished, timeout=2000):
+        page.analyze_button.click()
+
+    page.custom_args.args_edit.setText("--limit-rate 500K")
+    page.download_button.click()
+
+    manager.add_task.assert_called_once()
+    added_task = manager.add_task.call_args[0][0]
+    assert added_task.ytdlp_options.get("ratelimit") == 512000
