@@ -9,7 +9,7 @@ Tracks phase-by-phase progress. Each phase maps to several days of commits.
 - [x] Phase 5 — Download queue + threaded execution + progress hooks
 - [x] Phase 6 — Audio/video/subtitle option panels
 - [x] Phase 7 — Playlist support
-- [ ] Phase 8 — Advanced options + custom args + command preview
+- [x] Phase 8 — Advanced options + custom args + command preview
 - [ ] Phase 9 — Settings, history, logging pages
 - [ ] Phase 10 — Themes, accessibility, UI polish
 - [ ] Phase 11 — Automated test suite
