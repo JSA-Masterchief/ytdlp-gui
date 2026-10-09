@@ -38,6 +38,8 @@ class DownloadPage(QWidget):
         self,
         metadata_service: MetadataService | None = None,
         download_manager: DownloadManager | None = None,
+        initial_output_dir: str | None = None,
+        initial_filename_template: str | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -47,13 +49,15 @@ class DownloadPage(QWidget):
         self._download_manager = download_manager or DownloadManager(YtdlpBackend())
         self._analyzed_title: str | None = None
         self._analyzed_url: str | None = None
-        self._analyzed_playlist = None  # PlaylistInfo | None, set on analysis
+        self._analyzed_playlist = None
+        self._initial_output_dir = initial_output_dir
+        self._initial_filename_template = initial_filename_template
 
         self._build_ui()
 
     def _build_ui(self) -> None:
-        self._output_dir = str(get_default_download_dir())
-        self._filename_template = "%(title)s [%(id)s].%(ext)s"
+        self._output_dir = self._initial_output_dir or str(get_default_download_dir())
+        self._filename_template = self._initial_filename_template or "%(title)s [%(id)s].%(ext)s"
 
         layout = QVBoxLayout(self)
 
@@ -181,11 +185,6 @@ class DownloadPage(QWidget):
         self.format_selector.set_preview_text(preview)
 
     def _build_final_options(self, entry_url: str | None = None) -> dict:
-        """The options dict actually handed to the download queue: GUI
-        selections + advanced options + custom-argument overrides, fully
-        merged. Shared by both the single-video and playlist enqueue paths
-        so custom arguments apply consistently to either.
-        """
         selection = self.format_selector.current_selection()
         advanced = self.advanced_options.current_options()
         base_options = build_ytdlp_options(selection, self._output_dir, self._filename_template, advanced)
@@ -250,3 +249,16 @@ class DownloadPage(QWidget):
 
         self.queued_label.setText(f"Added {len(entries)} video(s) to queue from '{playlist.title}'.")
         self.queued_label.show()
+
+    def apply_settings(self, output_dir: str, filename_template: str) -> None:
+        """Called by MainWindow when Settings are saved, so a change to
+        the default download directory or filename template takes effect
+        immediately without needing to restart the app.
+        """
+        self._output_dir = output_dir
+        self._filename_template = filename_template
+        self._update_preview()
+
+    def set_url(self, url: str) -> None:
+        """Populate the URL box — used by History's "Redownload" action."""
+        self.url_input.setPlainText(url)
