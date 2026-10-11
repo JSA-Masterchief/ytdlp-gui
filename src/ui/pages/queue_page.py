@@ -1,6 +1,5 @@
 """The Queue page: shows every DownloadTask with live progress and the
-per-row controls from the spec (cancel, retry, remove, clear completed).
-"""
+per-row controls (cancel, retry, remove, clear completed)."""
 
 from __future__ import annotations
 
@@ -66,10 +65,11 @@ class QueuePage(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        # Actions holds up to 3 buttons (Cancel/Retry/Remove); size it to
+        # its actual content rather than a cramped default width.
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         layout.addWidget(self.table)
-
-    # -- manager signal handlers ---------------------------------------------
 
     def _on_task_added(self, task: DownloadTask) -> None:
         row = self.table.rowCount()
@@ -120,8 +120,6 @@ class QueuePage(QWidget):
         for tid, r in list(self._row_by_task_id.items()):
             if r > row:
                 self._row_by_task_id[tid] = r - 1
-
-    # -- per-row action buttons -----------------------------------------------
 
     def _build_actions_widget(self, task_id: str) -> QWidget:
         container = QWidget()

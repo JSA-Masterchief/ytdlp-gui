@@ -56,6 +56,10 @@ class HistoryPage(QWidget):
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        # The actions column holds 4 buttons; without this it's clipped
+        # to a default width far too narrow to show them (see the Phase 9
+        # screenshot this was flagged from) — size it to its actual content.
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         layout.addWidget(self.table)
 
