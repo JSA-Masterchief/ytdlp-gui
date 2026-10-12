@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QToolBar,
@@ -15,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.config import load_config
+from app.config import load_config, save_config
 from app.constants import APP_NAME, APP_VERSION
 from backend.ytdlp_backend import YtdlpBackend
 from download.history import HistoryStore
@@ -26,9 +30,19 @@ from ui.pages.history_page import HistoryPage
 from ui.pages.logs_page import LogsPage
 from ui.pages.queue_page import QueuePage
 from ui.pages.settings_page import SettingsPage
+from ui.theme import apply_theme, next_theme
 from utils.paths import get_history_file_path, get_log_file_path
 
 NAV_SECTIONS = ["Download", "Queue", "History", "Formats", "Settings", "Logs"]
+
+_ABOUT_TEXT = (
+    f"<b>{APP_NAME}</b> v{APP_VERSION}<br><br>"
+    "A desktop frontend for yt-dlp.<br><br>"
+    "This application does not implement or facilitate DRM circumvention. "
+    "You are responsible for ensuring your use complies with applicable laws, "
+    "the terms of service of the sites you download from, and the rights "
+    "holders of any content."
+)
 
 
 class MainWindow(QMainWindow):
@@ -36,6 +50,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(1100, 720)
+
+        self.config = load_config()
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, self.config.theme)
 
         self._build_header()
         self._build_body()
@@ -46,19 +65,63 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
 
         title = QLabel(f"  {APP_NAME}")
+        title.setAccessibleName("Application title")
         title.setStyleSheet("font-weight: 600; font-size: 14px;")
         toolbar.addWidget(title)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        toolbar.addWidget(spacer)
+
+        self.theme_toggle_button = QPushButton()
+        self.theme_toggle_button.setAccessibleName("Toggle theme")
+        self.theme_toggle_button.setToolTip("Cycle through System, Light, and Dark themes")
+        self._update_theme_toggle_label()
+        self.theme_toggle_button.clicked.connect(self._on_theme_toggle_clicked)
+        toolbar.addWidget(self.theme_toggle_button)
+
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.setAccessibleName("Open settings")
+        self.settings_button.clicked.connect(self._on_settings_button_clicked)
+        toolbar.addWidget(self.settings_button)
+
+        self.about_button = QPushButton("About")
+        self.about_button.setAccessibleName("About this application")
+        self.about_button.clicked.connect(self._on_about_clicked)
+        toolbar.addWidget(self.about_button)
+
+    def _update_theme_toggle_label(self) -> None:
+        self.theme_toggle_button.setText(f"Theme: {self.config.theme.capitalize()}")
+
+    def _on_theme_toggle_clicked(self) -> None:
+        new_theme = next_theme(self.config.theme)
+        self.config.theme = new_theme
+        save_config(self.config)
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, new_theme)
+        self._update_theme_toggle_label()
+        if hasattr(self, "settings_page"):
+            idx = self.settings_page.theme_combo.findData(new_theme)
+            if idx >= 0:
+                self.settings_page.theme_combo.setCurrentIndex(idx)
+
+    def _on_settings_button_clicked(self) -> None:
+        self.nav_list.setCurrentRow(NAV_SECTIONS.index("Settings"))
+
+    def _on_about_clicked(self) -> None:
+        QMessageBox.about(self, f"About {APP_NAME}", _ABOUT_TEXT)
 
     def _build_body(self) -> None:
         splitter = QSplitter(Qt.Horizontal)
 
         self.nav_list = QListWidget()
         self.nav_list.setFixedWidth(180)
+        self.nav_list.setAccessibleName("Main navigation")
         for section in NAV_SECTIONS:
             QListWidgetItem(section, self.nav_list)
         self.nav_list.currentRowChanged.connect(self._on_nav_changed)
 
-        self.config = load_config()
         self.download_manager = DownloadManager(YtdlpBackend(), max_concurrent=self.config.max_concurrent_downloads)
         self.history_store = HistoryStore(get_history_file_path())
         # Kept as a real attribute (not a throwaway expression): a
@@ -117,9 +180,16 @@ class MainWindow(QMainWindow):
         self.nav_list.setCurrentRow(NAV_SECTIONS.index("Download"))
 
     def _on_settings_saved(self, new_config) -> None:  # noqa: ANN001
+        theme_changed = new_config.theme != self.config.theme
         self.config = new_config
         self.download_manager.set_max_concurrent(new_config.max_concurrent_downloads)
         self.download_page.apply_settings(new_config.download_directory, new_config.filename_template)
+
+        if theme_changed:
+            app = QApplication.instance()
+            if app is not None:
+                apply_theme(app, new_config.theme)
+            self._update_theme_toggle_label()
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self.download_manager.shutdown()
