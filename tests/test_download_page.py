@@ -257,3 +257,25 @@ def test_initial_output_dir_and_template_are_used(qtbot):
 
     assert page._output_dir == "/configured/dir"
     assert page._filename_template == "%(uploader)s.%(ext)s"
+
+
+def test_ctrl_enter_shortcut_is_bound_to_analyze(qtbot):
+    """QShortcut activation via simulated key events is unreliable in
+    headless/offscreen test environments (it depends on real window
+    activation), so this verifies the binding directly: the right key
+    sequence is registered and firing it calls the same handler Analyze
+    uses, rather than simulating an actual keypress.
+    """
+    from PySide6.QtGui import QKeySequence
+
+    backend = MagicMock()
+    backend.analyze.return_value = SAMPLE_MEDIA
+    service = MetadataService(backend=backend)
+    page = DownloadPage(metadata_service=service, download_manager=MagicMock())
+    qtbot.addWidget(page)
+
+    assert page.analyze_shortcut.key() == QKeySequence("Ctrl+Return")
+
+    page.url_input.setPlainText("https://example.com/abc123")
+    with qtbot.waitSignal(service.analysis_finished, timeout=2000):
+        page.analyze_shortcut.activated.emit()
