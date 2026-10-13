@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
@@ -68,8 +69,17 @@ class DownloadPage(QWidget):
         self.url_input.setPlaceholderText("https://www.youtube.com/watch?v=...")
         self.url_input.setAcceptDrops(True)
         self.url_input.setFixedHeight(90)
+        self.url_input.setAccessibleName("URL input")
+        self.url_input.setToolTip("Paste one or more video, playlist, or channel URLs — one per line")
         self.url_input.textChanged.connect(self._update_preview)
         layout.addWidget(self.url_input)
+
+        # Ctrl+Enter triggers Analyze from anywhere on the page — a plain
+        # Enter in a multi-line QTextEdit types a newline instead, so this
+        # is the accessible keyboard path the spec calls for without
+        # breaking normal multi-URL pasting/typing.
+        self.analyze_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        self.analyze_shortcut.activated.connect(self._on_analyze_clicked)
 
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("color: #c0392b;")
@@ -77,6 +87,8 @@ class DownloadPage(QWidget):
         layout.addWidget(self.status_label)
 
         self.analyze_button = QPushButton("Analyze")
+        self.analyze_button.setAccessibleName("Analyze URL")
+        self.analyze_button.setToolTip("Fetch metadata and available formats (Ctrl+Enter)")
         self.analyze_button.clicked.connect(self._on_analyze_clicked)
         layout.addWidget(self.analyze_button, alignment=Qt.AlignLeft)
 
@@ -101,6 +113,7 @@ class DownloadPage(QWidget):
         layout.addWidget(self.custom_args)
 
         self.download_button = QPushButton("Download")
+        self.download_button.setAccessibleName("Start download")
         self.download_button.setEnabled(False)
         self.download_button.clicked.connect(self._on_download_clicked)
         layout.addWidget(self.download_button, alignment=Qt.AlignLeft)
