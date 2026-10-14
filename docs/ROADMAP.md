@@ -9,7 +9,7 @@
 - [x] Phase 7 — Playlist support
 - [x] Phase 8 — Advanced options + custom args + command preview
 - [x] Phase 9 — Settings, history, logging pages
-- [ ] Phase 10 — Themes, accessibility, UI polish
+- [x] Phase 10 — Themes, accessibility, UI polish
 - [ ] Phase 11 — Automated test suite
 - [ ] Phase 12 — Windows PyInstaller packaging
 - [ ] Phase 13 — Final QA pass
