@@ -24,6 +24,13 @@ from PySide6.QtWidgets import (
 from app.config import AppConfig, save_config
 from app.constants import MAX_CONCURRENT_DOWNLOADS_LIMIT, SUPPORTED_THEMES
 from backend.ffmpeg_manager import check_ffmpeg, check_ffprobe
+from formats.filename_templates import (
+    COMMON_TEMPLATE_VARIABLES,
+    CUSTOM_PRESET_KEY,
+    FILENAME_TEMPLATE_PRESETS,
+    find_matching_preset,
+    validate_filename_template,
+)
 
 
 class SettingsPage(QWidget):
@@ -64,9 +71,24 @@ class SettingsPage(QWidget):
         self.max_concurrent_spin.setMaximum(MAX_CONCURRENT_DOWNLOADS_LIMIT)
         downloads_form.addRow("Max simultaneous downloads:", self.max_concurrent_spin)
 
+        self.template_preset_combo = QComboBox()
+        for key, (label, _template) in FILENAME_TEMPLATE_PRESETS.items():
+            self.template_preset_combo.addItem(label, userData=key)
+        self.template_preset_combo.addItem("Custom", userData=CUSTOM_PRESET_KEY)
+        self.template_preset_combo.currentIndexChanged.connect(self._on_template_preset_changed)
+        downloads_form.addRow("Filename preset:", self.template_preset_combo)
+
+        variables_help = "\n".join(f"%({name})s  —  {desc}" for name, desc in COMMON_TEMPLATE_VARIABLES.items())
         self.filename_template_edit = QLineEdit()
-        self.filename_template_edit.setToolTip("yt-dlp output template, e.g. %(title)s [%(id)s].%(ext)s")
+        self.filename_template_edit.setToolTip("yt-dlp output template. Common variables:\n" + variables_help)
+        self.filename_template_edit.setAccessibleName("Filename template")
+        self.filename_template_edit.textChanged.connect(self._on_template_text_changed)
         downloads_form.addRow("Filename template:", self.filename_template_edit)
+
+        self.template_status_label = QLabel("")
+        self.template_status_label.setWordWrap(True)
+        self.template_status_label.hide()
+        downloads_form.addRow("", self.template_status_label)
 
         layout.addWidget(downloads_group)
 
@@ -107,6 +129,35 @@ class SettingsPage(QWidget):
         self.filename_template_edit.setText(config.filename_template)
         self.ffmpeg_path_edit.setText(config.ffmpeg_path or "")
 
+    def _on_template_preset_changed(self) -> None:
+        key = self.template_preset_combo.currentData()
+        if key in FILENAME_TEMPLATE_PRESETS:
+            # Setting the text re-triggers _on_template_text_changed, which
+            # re-selects the same preset — harmless, and keeps one code path.
+            self.filename_template_edit.setText(FILENAME_TEMPLATE_PRESETS[key][1])
+
+    def _on_template_text_changed(self, text: str) -> None:
+        # Keep the preset dropdown honest about what's typed, without
+        # re-firing _on_template_preset_changed (which would overwrite it).
+        matching = find_matching_preset(text.strip())
+        idx = self.template_preset_combo.findData(matching)
+        if idx >= 0 and idx != self.template_preset_combo.currentIndex():
+            self.template_preset_combo.blockSignals(True)
+            self.template_preset_combo.setCurrentIndex(idx)
+            self.template_preset_combo.blockSignals(False)
+
+        result = validate_filename_template(text)
+        if not result.ok:
+            self.template_status_label.setText(f"⚠ {result.error_message}")
+            self.template_status_label.setStyleSheet("color: #c0392b;")
+            self.template_status_label.show()
+        elif result.warning_message:
+            self.template_status_label.setText(f"⚠ {result.warning_message}")
+            self.template_status_label.setStyleSheet("color: #b8860b;")
+            self.template_status_label.show()
+        else:
+            self.template_status_label.hide()
+
     def _on_browse_download_dir(self) -> None:
         directory = QFileDialog.getExistingDirectory(self, "Choose download directory", self.download_dir_edit.text())
         if directory:
@@ -140,9 +191,17 @@ class SettingsPage(QWidget):
         )
 
     def _on_save_clicked(self) -> None:
+        template_result = validate_filename_template(self.filename_template_edit.text())
+        if not template_result.ok:
+            self.saved_label.setText("Fix the filename template before saving.")
+            self.saved_label.setStyleSheet("color: #c0392b;")
+            self.saved_label.show()
+            return
+
         new_config = self.current_config()
         save_config(new_config)
         self._config = new_config
         self.saved_label.setText("Settings saved.")
+        self.saved_label.setStyleSheet("color: #2e7d32;")
         self.saved_label.show()
         self.settings_saved.emit(new_config)
