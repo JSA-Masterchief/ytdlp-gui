@@ -1,18 +1,11 @@
 """Owns the download queue: enforces max-concurrent-downloads, starts the
-next queued task whenever a slot frees up, and exposes the controls the
-Queue page needs (cancel, retry, remove, reorder, clear completed).
-
-Threading model: each active download gets its own QThread + DownloadWorker
-pair, created fresh per attempt. Thread teardown is always synchronous
-(quit() then wait()) before we touch shared state again — see
-services/metadata_service.py for the crash this avoids if done any other
-way.
-"""
+next queued task whenever a slot frees up, and exposes queue controls."""
 
 from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -26,6 +19,12 @@ logger = logging.getLogger("ytdlp_gui")
 
 DEFAULT_MAX_CONCURRENT = 2
 
+# How long closing the app waits, in total, for cancelled downloads to stop.
+# yt-dlp only checks for cancellation when it reports progress, so a download
+# stuck in an FFmpeg merge or a stalled socket can't react until that ends;
+# waiting unboundedly would freeze the window on close.
+SHUTDOWN_TIMEOUT_MS = 3000
+
 
 @dataclass
 class _ActiveDownload:
@@ -35,9 +34,9 @@ class _ActiveDownload:
 
 
 class DownloadManager(QObject):
-    task_added = Signal(object)  # DownloadTask
-    task_updated = Signal(object)  # DownloadTask
-    task_removed = Signal(str)  # task id
+    task_added = Signal(object)
+    task_updated = Signal(object)
+    task_removed = Signal(str)
     queue_changed = Signal()
 
     def __init__(self, backend: YtdlpBackend | None = None, max_concurrent: int = DEFAULT_MAX_CONCURRENT) -> None:
@@ -45,11 +44,12 @@ class DownloadManager(QObject):
         self._backend = backend or YtdlpBackend()
         self._max_concurrent = max(1, max_concurrent)
         self._tasks: dict[str, DownloadTask] = {}
-        self._order: list[str] = []  # display order, all tasks
-        self._pending: list[str] = []  # queued task ids awaiting a slot
+        self._order: list[str] = []
+        self._pending: list[str] = []
         self._active: dict[str, _ActiveDownload] = {}
-
-    # -- configuration -----------------------------------------------------
+        self._remove_when_finished: set[str] = set()
+        self._orphaned: list[_ActiveDownload] = []  # still running after a timed-out shutdown
+        self._shutting_down = False
 
     def set_max_concurrent(self, value: int) -> None:
         self._max_concurrent = max(1, value)
@@ -58,8 +58,6 @@ class DownloadManager(QObject):
     @property
     def max_concurrent(self) -> int:
         return self._max_concurrent
-
-    # -- queries -------------------------------------------------------------
 
     def get_task(self, task_id: str) -> DownloadTask | None:
         return self._tasks.get(task_id)
@@ -71,7 +69,15 @@ class DownloadManager(QObject):
     def active_count(self) -> int:
         return len(self._active)
 
-    # -- queue mutation ------------------------------------------------------
+    @property
+    def has_orphaned_threads(self) -> bool:
+        """True if a download thread was still running when shutdown() gave
+        up waiting. The caller should then exit the process without normal
+        interpreter teardown, since Qt aborts if a running QThread is
+        destroyed (see app/main.py).
+        """
+        self._orphaned = [a for a in self._orphaned if a.thread.isRunning()]
+        return bool(self._orphaned)
 
     def add_task(self, task: DownloadTask) -> None:
         self._tasks[task.id] = task
@@ -87,8 +93,6 @@ class DownloadManager(QObject):
             return
 
         if task_id in self._active:
-            # Cooperative cancellation: the worker's own progress callback
-            # checks this flag. It is NOT instantaneous — see download/worker.py.
             self._active[task_id].cancel_event.set()
             return
 
@@ -113,10 +117,15 @@ class DownloadManager(QObject):
 
     def remove(self, task_id: str) -> None:
         if task_id in self._active:
+            # A live QThread can't be torn down from here: cancel it, and
+            # finish the removal once the worker reports back.
+            self._remove_when_finished.add(task_id)
             self.cancel(task_id)
-            # Removal completes once the cancelled worker reports back;
-            # avoid tearing down a live QThread here.
             return
+        self._remove_now(task_id)
+
+    def _remove_now(self, task_id: str) -> None:
+        self._remove_when_finished.discard(task_id)
         if task_id in self._pending:
             self._pending.remove(task_id)
         if task_id in self._order:
@@ -124,6 +133,10 @@ class DownloadManager(QObject):
         self._tasks.pop(task_id, None)
         self.task_removed.emit(task_id)
         self.queue_changed.emit()
+
+    def _remove_if_requested(self, task_id: str) -> None:
+        if task_id in self._remove_when_finished:
+            self._remove_now(task_id)
 
     def move_up(self, task_id: str) -> None:
         self._reorder(task_id, offset=-1)
@@ -133,7 +146,7 @@ class DownloadManager(QObject):
 
     def _reorder(self, task_id: str, offset: int) -> None:
         if task_id not in self._pending:
-            return  # only queued (not-yet-started) tasks can be reordered
+            return
         idx = self._pending.index(task_id)
         new_idx = idx + offset
         if 0 <= new_idx < len(self._pending):
@@ -149,22 +162,35 @@ class DownloadManager(QObject):
         if to_remove:
             self.queue_changed.emit()
 
-    def shutdown(self) -> None:
-        """Cancel and synchronously join all active downloads. Call this
-        before application exit so no QThread is destroyed while running.
+    def shutdown(self, timeout_ms: int = SHUTDOWN_TIMEOUT_MS) -> None:
+        """Cancel all downloads and wait up to `timeout_ms` in total (one
+        shared budget, not per download) for them to stop. Any that haven't
+        stopped by then are left running and reported by
+        has_orphaned_threads; nothing new is started afterwards. Safe to
+        call more than once.
         """
-        for task_id in list(self._active.keys()):
-            self._active[task_id].cancel_event.set()
-        for task_id in list(self._active.keys()):
-            active = self._active.get(task_id)
-            if active is not None:
-                active.thread.quit()
-                active.thread.wait()
+        self._shutting_down = True
+        self._pending.clear()
+
+        active_downloads = list(self._active.values())
+        for active in active_downloads:
+            active.cancel_event.set()
+
+        deadline = time.monotonic() + timeout_ms / 1000
+        for active in active_downloads:
+            # quit() before run() returns makes the thread's event loop exit
+            # as soon as it does, so wait() ends the moment the download
+            # notices the cancellation.
+            active.thread.quit()
+            remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
+            if not active.thread.wait(remaining_ms):
+                logger.warning("A download did not stop within the shutdown timeout; leaving it running.")
+                self._orphaned.append(active)
         self._active.clear()
 
-    # -- internal: starting and finishing downloads ---------------------------
-
     def _try_start_next(self) -> None:
+        if self._shutting_down:
+            return
         while self._pending and len(self._active) < self._max_concurrent:
             task_id = self._pending.pop(0)
             task = self._tasks.get(task_id)
@@ -182,14 +208,6 @@ class DownloadManager(QObject):
         worker.moveToThread(thread)
 
         thread.started.connect(worker.run)
-        # Connected to real bound methods of `self` (a QObject living on the
-        # main thread), not lambdas: PySide6 only auto-detects the need for
-        # a queued cross-thread connection when the receiver is a QObject
-        # method. A lambda has no thread affinity of its own, so Qt (even
-        # with an explicit QueuedConnection hint) invokes it directly on
-        # the emitting worker thread — which then deadlocks/aborts the
-        # moment it calls thread.wait() on its own thread. Each handler
-        # below recovers which task it's for via self.sender().
         worker.progress.connect(self._on_worker_progress)
         worker.succeeded.connect(self._on_worker_succeeded)
         worker.failed.connect(self._on_worker_failed)
@@ -241,6 +259,7 @@ class DownloadManager(QObject):
             return
         task.status = DownloadStatus.COMPLETED
         self.task_updated.emit(task)
+        self._remove_if_requested(task_id)
         self._try_start_next()
 
     def _on_failed(self, task_id: str, user_message: str, technical_detail: str) -> None:
@@ -251,6 +270,7 @@ class DownloadManager(QObject):
         task.error_message = user_message
         logger.warning("Task %s failed: %s", task_id, technical_detail)
         self.task_updated.emit(task)
+        self._remove_if_requested(task_id)
         self._try_start_next()
 
     def _on_cancelled(self, task_id: str) -> None:
@@ -259,14 +279,15 @@ class DownloadManager(QObject):
             return
         task.status = DownloadStatus.CANCELLED
         self.task_updated.emit(task)
+        self._remove_if_requested(task_id)
         self._try_start_next()
 
     def _finish_active(self, task_id: str) -> DownloadTask | None:
         active = self._active.pop(task_id, None)
-        if active is not None:
-            # Synchronous join, done here rather than relying on a
-            # thread.finished callback, so we never touch a QThread that
-            # might still be shutting down. See module docstring.
-            active.thread.quit()
-            active.thread.wait()
+        if active is None:
+            # Not (or no longer) running, e.g. a late event from a thread
+            # orphaned by shutdown(). Ignore it rather than resurrect state.
+            return None
+        active.thread.quit()
+        active.thread.wait()
         return self._tasks.get(task_id)
