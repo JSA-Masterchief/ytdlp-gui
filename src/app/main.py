@@ -1,18 +1,12 @@
-"""Application entry point.
-
-Run with: python src/app/main.py
-(src/ is added to sys.path so `app.*`, `ui.*` etc. resolve as top-level
-packages — see the sys.path shim below.)
-"""
+"""Application entry point."""
 
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
-# Allow running this file directly (python src/app/main.py) by ensuring
-# src/ is importable as the package root.
 SRC_ROOT = Path(__file__).resolve().parent.parent
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
@@ -39,7 +33,18 @@ def main() -> int:
     window = MainWindow()
     window.show()
 
-    return app.exec()
+    exit_code = app.exec()
+
+    if window.download_manager.has_orphaned_threads:
+        # A download didn't stop within the shutdown timeout (see
+        # DownloadManager.shutdown). Normal interpreter teardown would
+        # destroy its still-running QThread, which makes Qt abort with a
+        # crash. Partial downloads are resumable, so skip teardown instead.
+        logger.warning("Exiting with a download thread still running; skipping normal teardown.")
+        logging.shutdown()
+        os._exit(exit_code)
+
+    return exit_code
 
 
 if __name__ == "__main__":
