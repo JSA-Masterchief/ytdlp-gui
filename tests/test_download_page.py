@@ -230,7 +230,7 @@ def test_apply_settings_updates_output_dir_and_preview(qtbot):
 
     assert page._output_dir == "/new/download/dir"
     assert page._filename_template == "%(id)s.%(ext)s"
-    assert "/new/download/dir" in page.format_selector.preview_box.toPlainText()
+    assert str(Path("/new/download/dir")) in page.format_selector.preview_box.toPlainText()
 
 
 def test_set_url_populates_url_input(qtbot):
@@ -279,3 +279,46 @@ def test_ctrl_enter_shortcut_is_bound_to_analyze(qtbot):
     page.url_input.setPlainText("https://example.com/abc123")
     with qtbot.waitSignal(service.analysis_finished, timeout=2000):
         page.analyze_shortcut.activated.emit()
+
+
+def test_ffmpeg_location_reaches_download_options_and_preview(qtbot):
+    page = DownloadPage(
+        metadata_service=MetadataService(backend=MagicMock()),
+        download_manager=MagicMock(),
+        ffmpeg_location="C:/tools/ffmpeg.exe",
+    )
+    qtbot.addWidget(page)
+
+    assert page._build_final_options()["ffmpeg_location"] == "C:/tools/ffmpeg.exe"
+    assert "--ffmpeg-location" in page.format_selector.preview_box.toPlainText()
+
+
+def test_no_ffmpeg_location_option_when_unset(qtbot):
+    page = DownloadPage(metadata_service=MetadataService(backend=MagicMock()), download_manager=MagicMock())
+    qtbot.addWidget(page)
+
+    assert "ffmpeg_location" not in page._build_final_options()
+    assert "--ffmpeg-location" not in page.format_selector.preview_box.toPlainText()
+
+
+def test_apply_settings_updates_ffmpeg_location(qtbot):
+    page = DownloadPage(metadata_service=MetadataService(backend=MagicMock()), download_manager=MagicMock())
+    qtbot.addWidget(page)
+
+    page.apply_settings("/dl", "%(id)s.%(ext)s", "/opt/ffmpeg")
+    assert page._build_final_options()["ffmpeg_location"] == "/opt/ffmpeg"
+
+    page.apply_settings("/dl", "%(id)s.%(ext)s", None)
+    assert "ffmpeg_location" not in page._build_final_options()
+
+
+def test_custom_ffmpeg_location_arg_overrides_settings(qtbot):
+    page = DownloadPage(
+        metadata_service=MetadataService(backend=MagicMock()),
+        download_manager=MagicMock(),
+        ffmpeg_location="/from/settings",
+    )
+    qtbot.addWidget(page)
+
+    page.custom_args.args_edit.setText("--ffmpeg-location /from/args")
+    assert page._build_final_options()["ffmpeg_location"] == "/from/args"

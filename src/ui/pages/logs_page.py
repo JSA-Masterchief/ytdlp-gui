@@ -13,14 +13,15 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
-    QHBoxLayout,
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
+
+from ui.icons import make_icon
+from ui.widgets.common import PageHeader, make_button
 
 
 class LogsPage(QWidget):
@@ -33,36 +34,34 @@ class LogsPage(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
 
-        toolbar = QHBoxLayout()
+        header = PageHeader("Logs", "What the app has been doing. Useful when something goes wrong.")
+        self.refresh_button = make_button(variant="icon", icon="retry", tooltip="Refresh")
+        self.refresh_button.clicked.connect(self.refresh)
+        self.copy_button = make_button(variant="icon", icon="copy", tooltip="Copy to clipboard")
+        self.copy_button.clicked.connect(self._on_copy)
+        self.save_button = make_button(variant="icon", icon="save", tooltip="Save to a file…")
+        self.save_button.clicked.connect(self._on_save)
+        self.clear_button = make_button("Clear", variant="danger", icon="trash")
+        self.clear_button.clicked.connect(self._on_clear)
+        for button in (self.refresh_button, self.copy_button, self.save_button, self.clear_button):
+            header.actions.addWidget(button)
+        layout.addWidget(header)
 
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Search log…")
+        self.search_edit.setPlaceholderText("Filter log lines…")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.addAction(make_icon("search", self.palette().placeholderText().color()), QLineEdit.LeadingPosition)
         self.search_edit.textChanged.connect(self._apply_filter)
-        toolbar.addWidget(self.search_edit, stretch=1)
-
-        self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.clicked.connect(self.refresh)
-        toolbar.addWidget(self.refresh_button)
-
-        self.copy_button = QPushButton("Copy")
-        self.copy_button.clicked.connect(self._on_copy)
-        toolbar.addWidget(self.copy_button)
-
-        self.save_button = QPushButton("Save…")
-        self.save_button.clicked.connect(self._on_save)
-        toolbar.addWidget(self.save_button)
-
-        self.clear_button = QPushButton("Clear")
-        self.clear_button.clicked.connect(self._on_clear)
-        toolbar.addWidget(self.clear_button)
-
-        layout.addLayout(toolbar)
+        layout.addWidget(self.search_edit)
 
         self.text_view = QPlainTextEdit()
+        self.text_view.setObjectName("logView")
         self.text_view.setReadOnly(True)
         self.text_view.setLineWrapMode(QPlainTextEdit.NoWrap)
-        layout.addWidget(self.text_view)
+        layout.addWidget(self.text_view, stretch=1)
 
     def refresh(self) -> None:
         try:

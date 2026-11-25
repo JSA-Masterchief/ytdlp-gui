@@ -1,6 +1,6 @@
 """Collapsible panel for subtitle, SponsorBlock, chapter, and
 metadata/thumbnail options. Hidden behind a toggle so the basic Download
-page stays simple by default, per the "don't overwhelm new users" goal.
+page stays simple by default.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLineEdit,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import set_button_icon
 from formats.advanced_options import (
     SPONSORBLOCK_ACTION_MARK,
     SPONSORBLOCK_ACTION_REMOVE,
@@ -54,17 +56,21 @@ class AdvancedOptionsWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
 
         self.toggle_button = QToolButton()
+        self.toggle_button.setObjectName("advancedToggle")
         self.toggle_button.setText("Advanced options")
+        self.toggle_button.setToolTip("Subtitles, SponsorBlock, chapters, metadata and custom yt-dlp arguments")
         self.toggle_button.setCheckable(True)
         self.toggle_button.setChecked(False)
         self.toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.toggle_button.setArrowType(Qt.RightArrow)
+        set_button_icon(self.toggle_button, "chevron-right", size=16)
         self.toggle_button.clicked.connect(self._on_toggle)
-        outer.addWidget(self.toggle_button)
+        outer.addWidget(self.toggle_button, alignment=Qt.AlignLeft)
 
         self.content = QWidget()
         self.content.setVisible(False)
         content_layout = QVBoxLayout(self.content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(12)
 
         content_layout.addWidget(self._build_subtitles_group())
         content_layout.addWidget(self._build_sponsorblock_group())
@@ -108,14 +114,17 @@ class AdvancedOptionsWidget(QWidget):
         layout.addLayout(action_row)
 
         self._sponsorblock_category_checkboxes: dict[str, QCheckBox] = {}
-        categories_row = QHBoxLayout()
-        for code, label in SPONSORBLOCK_CATEGORIES.items():
+        # A grid, not one long row: a single row of every category would
+        # force the whole window to be very wide.
+        categories_grid = QGridLayout()
+        categories_grid.setHorizontalSpacing(16)
+        for index, (code, label) in enumerate(SPONSORBLOCK_CATEGORIES.items()):
             checkbox = QCheckBox(label)
             checkbox.setEnabled(False)
             checkbox.setChecked(code == "sponsor")
             self._sponsorblock_category_checkboxes[code] = checkbox
-            categories_row.addWidget(checkbox)
-        layout.addLayout(categories_row)
+            categories_grid.addWidget(checkbox, index // 3, index % 3)
+        layout.addLayout(categories_grid)
 
         return group
 
@@ -158,17 +167,12 @@ class AdvancedOptionsWidget(QWidget):
         self.embed_thumbnail_checkbox.toggled.connect(self._emit_changed)
         self.write_thumbnail_checkbox.toggled.connect(self._emit_changed)
 
-        # Apply the initial enabled/disabled state now that handlers are
-        # connected — the combo already had its items (and thus a current
-        # index) set during _build_ui, before this signal existed to react
-        # to it, so nothing would otherwise disable the dependent controls
-        # for the default "No subtitles" selection.
         self._on_subtitle_mode_changed()
 
     def _on_toggle(self) -> None:
         expanded = self.toggle_button.isChecked()
         self.content.setVisible(expanded)
-        self.toggle_button.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        set_button_icon(self.toggle_button, "chevron-down" if expanded else "chevron-right", size=16)
 
     def _on_subtitle_mode_changed(self) -> None:
         enabled = self.subtitle_mode_combo.currentData() != SUBTITLE_MODE_NONE
@@ -216,8 +220,5 @@ class AdvancedOptionsWidget(QWidget):
         )
 
     def set_available_languages(self, languages: list[str]) -> None:
-        """Optional: called after analysis to prefill the languages field
-        with what's actually available, if the user hasn't typed anything.
-        """
         if not self.subtitle_languages_edit.text().strip() and languages:
             self.subtitle_languages_edit.setText(languages[0])

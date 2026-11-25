@@ -1,6 +1,5 @@
 """Shown after analyzing a playlist URL: a per-entry table with
-checkboxes, plus the entire-playlist / range / reverse / skip-downloaded
-controls from the spec.
+checkboxes, plus entire-playlist / range / reverse / skip-downloaded controls.
 """
 
 from __future__ import annotations
@@ -46,12 +45,14 @@ class PlaylistTableWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._entries: list[PlaylistEntry] = []
-        self._checkboxes: dict[int, QCheckBox] = {}  # index -> checkbox
+        self._checkboxes: dict[int, QCheckBox] = {}
         self._build_ui()
         self._connect_signals()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
 
         mode_group = QGroupBox("Which videos?")
         mode_layout = QVBoxLayout(mode_group)
@@ -111,6 +112,9 @@ class PlaylistTableWidget(QWidget):
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
+        self.table.setAlternatingRowColors(True)
+        self.table.setMinimumHeight(260)
         layout.addWidget(self.table)
 
     def _connect_signals(self) -> None:

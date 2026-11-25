@@ -1,7 +1,6 @@
-"""The raw "Custom yt-dlp Arguments" box: lets an advanced user type real
-yt-dlp CLI flags, validates them live against yt-dlp's own parser, and
-surfaces any conflicts with what the GUI's own controls already set —
-never silently overriding anything without saying so.
+"""The raw "Custom yt-dlp Arguments" box: validates live against yt-dlp's
+own parser, and surfaces conflicts with GUI controls without silently
+overriding anything.
 """
 
 from __future__ import annotations
@@ -19,11 +18,6 @@ from formats.custom_args import CustomArgsResult, parse_custom_args
 
 
 class CustomArgsWidget(QWidget):
-    """Emits args_changed whenever the parsed result changes (valid or
-    not) so the owning page can recompute the command preview and decide
-    whether Download should be blocked on a parse error.
-    """
-
     args_changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -33,16 +27,17 @@ class CustomArgsWidget(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        group = QGroupBox("Custom yt-dlp Arguments (advanced)")
+        group = QGroupBox("Custom yt-dlp arguments")
         group_layout = QVBoxLayout(group)
 
         hint = QLabel(
-            "Type real yt-dlp command-line flags here, e.g. --limit-rate 500K --proxy socks5://127.0.0.1:1080\n"
-            "These can override the settings chosen above — any conflict is shown below, never applied silently."
+            "Real yt-dlp flags, e.g. --limit-rate 500K. These can override the choices above; "
+            "any conflict is shown below, never applied silently."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: gray;")
+        hint.setProperty("role", "muted")
         group_layout.addWidget(hint)
 
         self.args_edit = QLineEdit()
@@ -51,19 +46,19 @@ class CustomArgsWidget(QWidget):
         group_layout.addWidget(self.args_edit)
 
         self.error_label = QLabel("")
-        self.error_label.setStyleSheet("color: #c0392b;")
+        self.error_label.setProperty("role", "error")
         self.error_label.setWordWrap(True)
         self.error_label.hide()
         group_layout.addWidget(self.error_label)
 
         self.url_warning_label = QLabel("")
-        self.url_warning_label.setStyleSheet("color: #b8860b;")
+        self.url_warning_label.setProperty("role", "warning")
         self.url_warning_label.setWordWrap(True)
         self.url_warning_label.hide()
         group_layout.addWidget(self.url_warning_label)
 
         self.conflict_label = QLabel("")
-        self.conflict_label.setStyleSheet("color: #b8860b;")
+        self.conflict_label.setProperty("role", "warning")
         self.conflict_label.setWordWrap(True)
         self.conflict_label.hide()
         group_layout.addWidget(self.conflict_label)
@@ -89,10 +84,6 @@ class CustomArgsWidget(QWidget):
         else:
             self.url_warning_label.hide()
 
-        # Conflicts against GUI options are computed by the owning page
-        # (which knows the current base options) via show_conflicts(),
-        # not here — this widget only knows about parsing, not the rest
-        # of the form's state.
         self.args_changed.emit()
 
     def is_valid(self) -> bool:
