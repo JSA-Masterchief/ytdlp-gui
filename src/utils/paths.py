@@ -39,3 +39,19 @@ def get_history_file_path() -> Path:
     from app.constants import HISTORY_FILENAME
 
     return get_app_data_dir() / HISTORY_FILENAME
+
+
+def get_resource_path(relative: str) -> Path:
+    """Locate a bundled read-only asset (e.g. "assets/icon.ico").
+
+    In a PyInstaller build, data files are unpacked under sys._MEIPASS;
+    from source they live at the repository root.
+    """
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    root = Path(bundle_root) if bundle_root else Path(__file__).resolve().parent.parent.parent
+    return root / relative
+
+
+def get_window_state_path() -> Path:
+    """Where the main window remembers its size and position between runs."""
+    return get_app_data_dir() / "window_state.bin"
