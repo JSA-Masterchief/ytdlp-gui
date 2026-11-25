@@ -1,21 +1,12 @@
 from __future__ import annotations
-
 import sys
 from pathlib import Path
-
 import pytest
-
 SRC_ROOT = Path(__file__).resolve().parent.parent / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
-
 from backend.models import PlaylistEntry
-from formats.playlist_selection import (
-    PlaylistDownloadOptions,
-    PlaylistSelectionMode,
-    apply_archive_option,
-    resolve_selected_entries,
-)
+from formats.playlist_selection import PlaylistDownloadOptions, PlaylistSelectionMode, apply_archive_option, resolve_selected_entries
 
 ENTRIES = [
     PlaylistEntry(id="v1", title="Video 1", url="https://x/1", index=1),
@@ -24,7 +15,6 @@ ENTRIES = [
     PlaylistEntry(id="v4", title="Video 4", url="https://x/4", index=4),
     PlaylistEntry(id="v5", title="Video 5", url="https://x/5", index=5),
 ]
-
 
 class TestPlaylistDownloadOptionsValidation:
     def test_range_start_below_one_raises(self):
@@ -38,7 +28,6 @@ class TestPlaylistDownloadOptionsValidation:
     def test_valid_range_does_not_raise(self):
         PlaylistDownloadOptions(mode=PlaylistSelectionMode.RANGE, range_start=2, range_end=4)
 
-
 class TestResolveAll:
     def test_all_mode_returns_every_entry_in_order(self):
         options = PlaylistDownloadOptions(mode=PlaylistSelectionMode.ALL)
@@ -50,7 +39,6 @@ class TestResolveAll:
         result = resolve_selected_entries(ENTRIES, options)
         assert [e.id for e in result] == ["v5", "v4", "v3", "v2", "v1"]
 
-
 class TestResolveSelected:
     def test_selected_mode_returns_only_checked_indices(self):
         options = PlaylistDownloadOptions(mode=PlaylistSelectionMode.SELECTED, selected_indices={1, 3, 5})
@@ -59,14 +47,11 @@ class TestResolveSelected:
 
     def test_selected_mode_with_no_indices_returns_empty(self):
         options = PlaylistDownloadOptions(mode=PlaylistSelectionMode.SELECTED, selected_indices=set())
-        result = resolve_selected_entries(ENTRIES, options)
-        assert result == []
+        assert resolve_selected_entries(ENTRIES, options) == []
 
     def test_selected_mode_ignores_out_of_range_indices(self):
         options = PlaylistDownloadOptions(mode=PlaylistSelectionMode.SELECTED, selected_indices={99})
-        result = resolve_selected_entries(ENTRIES, options)
-        assert result == []
-
+        assert resolve_selected_entries(ENTRIES, options) == []
 
 class TestResolveRange:
     def test_range_returns_inclusive_slice(self):
@@ -83,7 +68,6 @@ class TestResolveRange:
         options = PlaylistDownloadOptions(mode=PlaylistSelectionMode.RANGE, range_start=1, range_end=3, reverse=True)
         result = resolve_selected_entries(ENTRIES, options)
         assert [e.id for e in result] == ["v3", "v2", "v1"]
-
 
 class TestArchiveOption:
     def test_skip_archived_off_leaves_options_untouched(self):
@@ -107,25 +91,20 @@ class TestArchiveOption:
         apply_archive_option(original, options)
         assert "download_archive" not in original
 
+    def test_does_not_overwrite_existing_download_archive(self):
+        options = PlaylistDownloadOptions(skip_archived=True, archive_path="/tmp/gui_archive.txt")
+        result = apply_archive_option({"download_archive": "/tmp/custom_archive.txt"}, options)
+        assert result["download_archive"] == "/tmp/custom_archive.txt"
 
 class TestRealYtDlpArchiveBehavior:
     def test_real_yt_dlp_respects_download_archive_across_two_instances(self, tmp_path):
-        """The full point of the archive feature: a video recorded by one
-        YoutubeDL instance must be recognized as already-downloaded by a
-        second, separate instance pointed at the same file — exactly the
-        "skip already downloaded items" behavior the playlist UI promises.
-        """
         import yt_dlp
-
         archive_path = str(tmp_path / "archive.txt")
         options = PlaylistDownloadOptions(skip_archived=True, archive_path=archive_path)
         opts = apply_archive_option({"quiet": True, "skip_download": True}, options)
-
         info = {"id": "xyz789", "ie_key": "Youtube", "extractor": "youtube"}
-
         with yt_dlp.YoutubeDL(opts) as first:
             assert first.in_download_archive(info) is False
             first.record_download_archive(info)
-
         with yt_dlp.YoutubeDL(opts) as second:
             assert second.in_download_archive(info) is True

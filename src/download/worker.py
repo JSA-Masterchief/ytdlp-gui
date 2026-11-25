@@ -1,8 +1,5 @@
 """Runs a single download on its own QThread and reports progress/outcome
-via signals. Cancellation is cooperative: cancel_event is checked inside
-the progress callback (see backend.progress.DownloadCancelRequested for
-why this is the only reliable way to stop yt-dlp mid-transfer).
-"""
+via signals."""
 
 from __future__ import annotations
 
@@ -18,11 +15,9 @@ logger = logging.getLogger("ytdlp_gui")
 
 
 class DownloadWorker(QObject):
-    """Create one fresh instance per download attempt (including retries)."""
-
-    progress = Signal(object)  # DownloadProgress
+    progress = Signal(object)
     succeeded = Signal()
-    failed = Signal(str, str)  # user_message, technical_detail
+    failed = Signal(str, str)
     cancelled = Signal()
 
     def __init__(
@@ -38,9 +33,6 @@ class DownloadWorker(QObject):
         self._url = url
         self._options = options
         self._cancel_event = cancel_event
-        # Plain attribute (not a signal payload) so manager code can recover
-        # "which task is this?" via self.sender() in a real bound-method
-        # slot — see download/manager.py for why that matters.
         self.task_id = task_id
 
     def run(self) -> None:
@@ -58,7 +50,7 @@ class DownloadWorker(QObject):
             logger.warning("Download failed for %s: %s", self._url, exc.technical_detail)
             self.failed.emit(exc.user_message, exc.technical_detail)
             return
-        except Exception as exc:  # noqa: BLE001 - last-resort safety net
+        except Exception as exc:  # noqa: BLE001
             logger.exception("Unexpected error downloading %s", self._url)
             self.failed.emit("An unexpected error occurred.", str(exc))
             return

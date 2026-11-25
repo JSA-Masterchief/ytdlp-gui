@@ -1,10 +1,4 @@
-"""Lightweight URL validation.
-
-This is a basic sanity check only — it does NOT determine whether yt-dlp
-actually supports the site. yt-dlp itself is the source of truth for that;
-this just filters out obviously-empty or malformed input before we bother
-calling the backend, so the user gets instant feedback on typos.
-"""
+"""Lightweight URL validation."""
 
 from __future__ import annotations
 
@@ -23,14 +17,12 @@ def is_valid_url(candidate: str) -> bool:
 
 
 def split_urls(text: str) -> list[str]:
-    """Split multi-line / whitespace-separated pasted text into candidate URLs."""
     candidates = [line.strip() for line in text.splitlines()]
     urls = [c for c in candidates if c]
     return urls
 
 
 def validate_urls(text: str) -> tuple[list[str], list[str]]:
-    """Return (valid_urls, invalid_lines) from raw pasted text."""
     valid: list[str] = []
     invalid: list[str] = []
     for candidate in split_urls(text):

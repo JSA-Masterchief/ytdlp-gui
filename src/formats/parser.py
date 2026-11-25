@@ -1,20 +1,13 @@
-"""Helpers for turning a raw list[FormatInfo] into GUI-friendly summaries.
-
-This module never talks to yt-dlp directly — it only inspects FormatInfo
-objects already produced by backend.ytdlp_backend, keeping format-parsing
-logic testable without any network or subprocess dependency.
-"""
+"""Helpers for turning a raw list[FormatInfo] into GUI-friendly summaries."""
 
 from __future__ import annotations
 
 from backend.models import FormatInfo
 
-# Ordered from highest to lowest so callers can pick "best available <= target".
 STANDARD_HEIGHTS = [2160, 1440, 1080, 720, 480, 360, 240, 144]
 
 
 def _height_from_resolution(resolution: str | None) -> int | None:
-    """Extract the numeric height from strings like '1920x1080' or '1080p60'."""
     if not resolution:
         return None
     resolution = resolution.lower()
@@ -28,7 +21,6 @@ def _height_from_resolution(resolution: str | None) -> int | None:
 
 
 def available_video_heights(formats: list[FormatInfo]) -> list[int]:
-    """Return the distinct video heights present, sorted descending."""
     heights: set[int] = set()
     for fmt in formats:
         if fmt.vcodec in (None, "none"):
@@ -55,7 +47,6 @@ def format_filesize(num_bytes: int | None) -> str:
 
 
 def describe_format(fmt: FormatInfo) -> str:
-    """One-line human summary of a format, for display in an advanced list."""
     parts = [fmt.resolution or "audio-only" if fmt.is_audio_only else fmt.resolution or "?"]
     if fmt.fps:
         parts.append(f"{int(fmt.fps)}fps")

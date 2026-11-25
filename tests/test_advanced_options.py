@@ -1,35 +1,16 @@
-"""Tests for formats.advanced_options.
-
-test_real_yt_dlp_accepts_full_combination below constructs an actual
-yt_dlp.YoutubeDL with our generated options (skip_download=True, nothing
-fetched) to verify every postprocessor key/param shape is genuinely valid,
-not just internally consistent.
-"""
-
 from __future__ import annotations
-
 import sys
 from pathlib import Path
-
 import pytest
-
 SRC_ROOT = Path(__file__).resolve().parent.parent / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
-
 from formats.advanced_options import (
-    AdvancedOptions,
-    ChapterOptions,
-    MetadataOptions,
-    SponsorBlockOptions,
-    SubtitleOptions,
-    apply_advanced_options,
+    AdvancedOptions, ChapterOptions, MetadataOptions, SponsorBlockOptions, SubtitleOptions, apply_advanced_options,
 )
-
 
 def _base_opts() -> dict:
     return {"format": "best", "outtmpl": "/tmp/%(title)s.%(ext)s"}
-
 
 class TestSubtitleOptions:
     def test_invalid_mode_raises(self):
@@ -64,14 +45,12 @@ class TestSubtitleOptions:
     def test_embed_adds_ffmpeg_embed_subtitle_postprocessor(self):
         advanced = AdvancedOptions(subtitles=SubtitleOptions(mode="manual", embed=True))
         opts = apply_advanced_options(_base_opts(), advanced)
-        keys = [pp["key"] for pp in opts["postprocessors"]]
-        assert "FFmpegEmbedSubtitle" in keys
+        assert "FFmpegEmbedSubtitle" in [pp["key"] for pp in opts["postprocessors"]]
 
     def test_no_embed_means_no_postprocessor(self):
         advanced = AdvancedOptions(subtitles=SubtitleOptions(mode="manual", embed=False))
         opts = apply_advanced_options(_base_opts(), advanced)
         assert "postprocessors" not in opts
-
 
 class TestSponsorBlockOptions:
     def test_invalid_action_raises(self):
@@ -97,9 +76,7 @@ class TestSponsorBlockOptions:
     def test_mark_action_adds_only_sponsorblock(self):
         advanced = AdvancedOptions(sponsorblock=SponsorBlockOptions(enabled=True, action="mark", categories=["sponsor"]))
         opts = apply_advanced_options(_base_opts(), advanced)
-        keys = [pp["key"] for pp in opts["postprocessors"]]
-        assert keys == ["SponsorBlock"]
-
+        assert [pp["key"] for pp in opts["postprocessors"]] == ["SponsorBlock"]
 
 class TestChapterAndMetadataOptions:
     def test_embed_chapters_adds_ffmpeg_metadata_with_add_chapters(self):
@@ -112,8 +89,7 @@ class TestChapterAndMetadataOptions:
     def test_split_chapters_adds_split_postprocessor(self):
         advanced = AdvancedOptions(chapters=ChapterOptions(split_chapters=True))
         opts = apply_advanced_options(_base_opts(), advanced)
-        keys = [pp["key"] for pp in opts["postprocessors"]]
-        assert "FFmpegSplitChapters" in keys
+        assert "FFmpegSplitChapters" in [pp["key"] for pp in opts["postprocessors"]]
 
     def test_embed_metadata_adds_ffmpeg_metadata_with_add_metadata(self):
         advanced = AdvancedOptions(metadata=MetadataOptions(embed_metadata=True))
@@ -130,20 +106,12 @@ class TestChapterAndMetadataOptions:
     def test_embed_thumbnail_adds_postprocessor_and_forces_write_thumbnail(self):
         advanced = AdvancedOptions(metadata=MetadataOptions(embed_thumbnail=True, write_thumbnail=False))
         opts = apply_advanced_options(_base_opts(), advanced)
-        keys = [pp["key"] for pp in opts["postprocessors"]]
-        assert "EmbedThumbnail" in keys
-        assert opts["writethumbnail"] is True  # forced on so there's something to embed
-
+        assert "EmbedThumbnail" in [pp["key"] for pp in opts["postprocessors"]]
+        assert opts["writethumbnail"] is True
 
 class TestRealYtDlpAcceptance:
     def test_real_yt_dlp_accepts_full_combination(self):
-        """The single most important test in this file: construct an actual
-        yt_dlp.YoutubeDL (no network — skip_download=True) with every
-        advanced option turned on simultaneously, and confirm yt-dlp's own
-        postprocessor factory accepts every key/param without raising.
-        """
         import yt_dlp
-
         advanced = AdvancedOptions(
             subtitles=SubtitleOptions(mode="all", languages=["en", "es"], embed=True),
             sponsorblock=SponsorBlockOptions(enabled=True, action="remove", categories=["sponsor", "intro"]),
@@ -153,10 +121,8 @@ class TestRealYtDlpAcceptance:
         opts = apply_advanced_options(_base_opts(), advanced)
         opts["skip_download"] = True
         opts["quiet"] = True
-
         with yt_dlp.YoutubeDL(opts) as ydl:
             all_pps = [pp.__class__.__name__ for stage_pps in ydl._pps.values() for pp in stage_pps]
-
         assert "FFmpegEmbedSubtitlePP" in all_pps
         assert "SponsorBlockPP" in all_pps
         assert "ModifyChaptersPP" in all_pps
@@ -166,15 +132,12 @@ class TestRealYtDlpAcceptance:
 
     def test_real_yt_dlp_accepts_mark_only_sponsorblock(self):
         import yt_dlp
-
         advanced = AdvancedOptions(sponsorblock=SponsorBlockOptions(enabled=True, action="mark", categories=["sponsor"]))
         opts = apply_advanced_options(_base_opts(), advanced)
         opts["skip_download"] = True
         opts["quiet"] = True
-
         with yt_dlp.YoutubeDL(opts) as ydl:
             after_filter_pps = [pp.__class__.__name__ for pp in ydl._pps["after_filter"]]
             all_pps = [pp.__class__.__name__ for stage_pps in ydl._pps.values() for pp in stage_pps]
-
         assert "SponsorBlockPP" in after_filter_pps
         assert "ModifyChaptersPP" not in all_pps

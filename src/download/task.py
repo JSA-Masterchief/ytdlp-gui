@@ -1,6 +1,4 @@
-"""The queue's unit of work: everything needed to run, display, and retry
-a single download.
-"""
+"""The queue's unit of work."""
 
 from __future__ import annotations
 

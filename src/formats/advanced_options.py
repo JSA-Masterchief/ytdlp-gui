@@ -19,7 +19,6 @@ SUBTITLE_MODE_AUTO = "auto"
 SUBTITLE_MODE_ALL = "all"
 ALL_SUBTITLE_MODES = (SUBTITLE_MODE_NONE, SUBTITLE_MODE_MANUAL, SUBTITLE_MODE_AUTO, SUBTITLE_MODE_ALL)
 
-# code -> display name, from yt_dlp.postprocessor.sponsorblock.SponsorBlockPP.CATEGORIES
 SPONSORBLOCK_CATEGORIES: dict[str, str] = {
     "sponsor": "Sponsor",
     "intro": "Intro",
@@ -38,7 +37,7 @@ SPONSORBLOCK_ACTION_MARK = "mark"
 class SubtitleOptions:
     mode: str = SUBTITLE_MODE_NONE
     languages: list[str] = field(default_factory=lambda: ["en"])
-    embed: bool = False  # burn into the container vs. leave as a sidecar file
+    embed: bool = False
 
     def __post_init__(self) -> None:
         if self.mode not in ALL_SUBTITLE_MODES:
@@ -81,11 +80,6 @@ class AdvancedOptions:
 
 
 def apply_advanced_options(options: dict[str, Any], advanced: AdvancedOptions) -> dict[str, Any]:
-    """Return a new options dict with `options` plus everything `advanced`
-    implies (top-level flags and postprocessor entries), mirroring how
-    yt-dlp's own CLI builds these from --write-subs, --sponsorblock-remove,
-    --embed-thumbnail, etc.
-    """
     opts = dict(options)
     postprocessors: list[dict[str, Any]] = list(opts.get("postprocessors", []))
 
@@ -126,8 +120,6 @@ def apply_advanced_options(options: dict[str, Any], advanced: AdvancedOptions) -
                     "force_keyframes": False,
                 }
             )
-        # action == "mark" needs no ModifyChapters step: SponsorBlock alone
-        # attaches the segments as chapter markers without cutting anything.
 
     chapters = advanced.chapters
     if chapters.split_chapters:

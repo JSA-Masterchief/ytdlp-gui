@@ -1,1 +1,1 @@
-"""Page widgets for each sidebar section (Download, Queue, History, etc.)."""
+"""Page widgets for each sidebar section."""

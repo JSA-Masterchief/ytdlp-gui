@@ -1,10 +1,4 @@
-"""Runs yt-dlp analysis off the GUI thread and reports results via signals.
-
-The UI must never call YtdlpBackend.analyze() directly on the main thread —
-metadata extraction can take several seconds (network + parsing), and doing
-it synchronously would freeze the whole application. AnalysisWorker runs it
-on a QThread and emits Qt signals when done.
-"""
+"""Runs yt-dlp analysis off the GUI thread and reports results via signals."""
 
 from __future__ import annotations
 
@@ -19,10 +13,8 @@ logger = logging.getLogger("ytdlp_gui")
 
 
 class AnalysisWorker(QObject):
-    """Runs on a QThread. Create with a fresh instance per analysis request."""
-
-    finished = Signal(object)  # MediaInfo | PlaylistInfo
-    failed = Signal(str, str)  # user_message, technical_detail
+    finished = Signal(object)
+    failed = Signal(str, str)
 
     def __init__(self, backend: YtdlpBackend, url: str) -> None:
         super().__init__()
@@ -36,7 +28,7 @@ class AnalysisWorker(QObject):
             logger.warning("Analysis failed for %s: %s", self._url, exc.technical_detail)
             self.failed.emit(exc.user_message, exc.technical_detail)
             return
-        except Exception as exc:  # noqa: BLE001 - last-resort safety net
+        except Exception as exc:  # noqa: BLE001
             logger.exception("Unexpected error analyzing %s", self._url)
             self.failed.emit("An unexpected error occurred.", str(exc))
             return
@@ -45,10 +37,8 @@ class AnalysisWorker(QObject):
 
 
 class MetadataService(QObject):
-    """Owns the backend instance, a small in-memory cache, and thread lifecycle."""
-
-    analysis_finished = Signal(str, object)  # url, MediaInfo | PlaylistInfo
-    analysis_failed = Signal(str, str, str)  # url, user_message, technical_detail
+    analysis_finished = Signal(str, object)
+    analysis_failed = Signal(str, str, str)
 
     def __init__(self, backend: YtdlpBackend | None = None) -> None:
         super().__init__()
@@ -63,8 +53,6 @@ class MetadataService(QObject):
             self.analysis_finished.emit(url, self._cache[url])
             return
 
-        # Only one analysis in flight at a time keeps this simple; the queue
-        # system (Phase 5) is what handles true concurrency for downloads.
         if self._thread is not None and self._thread.isRunning():
             logger.info("Analysis already in progress; ignoring new request for %s", url)
             return
@@ -94,13 +82,6 @@ class MetadataService(QObject):
             self.analysis_failed.emit(url, user_message, technical_detail)
 
     def _shutdown_thread(self) -> None:
-        # Stop and fully join the worker thread *before* emitting our own
-        # result signal. Emitting first (and letting listeners re-enter the
-        # event loop, e.g. by quitting the application) can leave the
-        # QThread's underlying OS thread still joining when it gets garbage
-        # collected, which crashes with "QThread: Destroyed while thread is
-        # still running". Doing cleanup synchronously here avoids that
-        # ordering hazard entirely.
         if self._thread is not None:
             self._thread.quit()
             self._thread.wait()
