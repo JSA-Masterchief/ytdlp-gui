@@ -11,5 +11,5 @@
 - [x] Phase 9 — Settings, history, logging pages
 - [x] Phase 10 — Themes, accessibility, UI polish
 - [x] Phase 11 — Automated test suite
-- [ ] Phase 12 — Windows PyInstaller packaging
-- [ ] Phase 13 — Final QA pass
+- [x] Phase 12 — Windows PyInstaller packaging
+- [x] Phase 13 — Final QA pass
