@@ -121,7 +121,12 @@ def build_command_preview(
     return render_command_preview(url, options, raw_custom_args)
 
 
-def render_command_preview(url: str, options: dict[str, Any], raw_custom_args: str = "", overridden_keys: frozenset[str] = frozenset()) -> str:
+def render_command_preview(
+    url: str,
+    options: dict[str, Any],
+    raw_custom_args: str = "",
+    overridden_keys: frozenset[str] = frozenset(),
+) -> str:
     """Build the display-only CLI string for an already-built options dict.
 
     Split out from build_command_preview so callers that have merged in
@@ -130,10 +135,9 @@ def render_command_preview(url: str, options: dict[str, Any], raw_custom_args: s
     what the GUI controls alone would produce.
 
     `overridden_keys`, if given, are option keys that custom arguments
-    already override (see merge_custom_args's conflict list): the
-    corresponding GUI-derived flag is skipped so it isn't shown twice —
-    once as what the GUI would have generated and again as the user's
-    literal override text appended below.
+    already override: the corresponding GUI-derived flag is skipped so it
+    isn't shown twice — once as what the GUI would have generated and
+    again as the user's literal override text appended below.
     """
     parts = ["yt-dlp"]
     if "format" not in overridden_keys:
@@ -168,15 +172,14 @@ def render_command_preview(url: str, options: dict[str, Any], raw_custom_args: s
                 parts.append("--add-chapters")
             continue
         if key == "ModifyChapters":
-            continue  # implied by --sponsorblock-remove above
+            continue
         if key in pp_flag_map and key not in seen_keys:
             parts += pp_flag_map[key](pp)
             seen_keys.add(key)
 
-    # Raw custom arguments are shown verbatim, exactly as the user typed
-    # them, rather than trying to reverse-engineer every possible flag
-    # back out of the merged options dict — this is both simpler and more
-    # honest about what will actually run (their exact text, in order).
+    if options.get("ffmpeg_location") and "ffmpeg_location" not in overridden_keys:
+        parts += ["--ffmpeg-location", shlex.quote(options["ffmpeg_location"])]
+
     if raw_custom_args.strip():
         parts.append(raw_custom_args.strip())
 

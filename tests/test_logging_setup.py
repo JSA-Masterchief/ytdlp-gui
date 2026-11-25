@@ -85,3 +85,14 @@ def test_log_file_is_utf8_safe(tmp_path, clean_logger):
     _flush(logger)
 
     assert "título — 動画 ✓" in log_file.read_text(encoding="utf-8")
+
+
+def test_skips_console_handler_when_there_is_no_stderr(tmp_path, clean_logger, monkeypatch):
+    # PyInstaller's windowed build sets sys.stderr to None.
+    monkeypatch.setattr(sys, "stderr", None)
+    logger = configure_logging(tmp_path / "app.log")
+
+    assert [type(h) for h in logger.handlers] == [logging.FileHandler]
+    logger.info("still logs to file")
+    _flush(logger)
+    assert "still logs to file" in (tmp_path / "app.log").read_text(encoding="utf-8")
