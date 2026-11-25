@@ -41,6 +41,7 @@ class AppConfig:
     ffmpeg_path: str | None = None
     ffprobe_path: str | None = None
     filename_template: str = "%(title)s [%(id)s].%(ext)s"
+    check_ytdlp_updates: bool = True
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -138,6 +139,10 @@ def _sanitize(data: dict[str, Any]) -> dict[str, Any]:
     template = data.get("filename_template")
     if isinstance(template, str) and template.strip():
         clean["filename_template"] = template.strip()
+
+    check_updates = data.get("check_ytdlp_updates")
+    if isinstance(check_updates, bool):
+        clean["check_ytdlp_updates"] = check_updates
 
     version = data.get("schema_version")
     if _is_real_int(version) and version >= 0:
